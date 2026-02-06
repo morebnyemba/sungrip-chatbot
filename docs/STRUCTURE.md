@@ -204,26 +204,61 @@ sungrip-chatbot/
 - `GET /api/messages/` - List messages
 - `POST /api/messages/` - Send message
 
-#### 5. **whatsapp_integration** - WhatsApp Business API
-**Purpose**: Interface with Meta WhatsApp Business API
+#### 5. **meta_integration** - Meta/WhatsApp Business API
+
+**Purpose**: Interface with Meta WhatsApp Business API following reference repo conventions
 
 **Models**:
-- `WhatsAppConfig`: API configuration
-  - Credentials (phone number ID, access token)
-  - API version
-  - Webhook settings
+- `MetaAppConfig`: API configuration with manager pattern
+  - name, phone_number_id, waba_id, catalog_id
+  - access_token, app_secret, verify_token
+  - api_version (v19.0), is_active
+  - Custom manager with `get_active_config()` method
 
-- `WebhookLog`: Webhook event logging
-  - Event type
-  - Payload
-  - Processing status
+- `WebhookEventLog`: Comprehensive webhook event logging
+  - event_identifier, event_type, processing_status
+  - app_config (FK), message (FK)
+  - waba_id_received, phone_number_id_received
+  - payload (JSON), processing_notes
 
 **Components** (to be implemented):
-- Webhook verification handler
+- Webhook verification handler with signature verification
 - Message receive handler
 - Message send service
 - Media upload/download service
 - Template message service
+- Celery tasks for async processing
+
+#### 6. **flows** - Conversational Flows
+
+**Purpose**: Manage conversational flows for WhatsApp chatbot
+
+**Models**:
+- `Flow`: Complete conversational flows
+  - name, friendly_name, description
+  - is_active, trigger_keywords (JSON)
+  - trigger_config (JSON)
+
+- `FlowStep`: Individual flow steps
+  - flow (FK), name, step_type
+  - config (JSON), is_entry_point
+  - Step types: send_message, question, condition, action, wait_for_reply, end_flow, human_handover, switch_flow
+
+- `FlowTransition`: Conditional transitions
+  - current_step (FK), next_step (FK)
+  - condition_config (JSON), priority
+
+- `FlowSession`: Active session tracking
+  - contact (FK), flow (FK), current_step (FK)
+  - context_data (JSON), status
+  - started_at, completed_at
+
+**Components** (to be implemented):
+- Flow processor service
+- Step executors for each step type
+- Transition evaluator
+- Context manager
+- Flow definitions for solar business
 
 ## Data Flow
 

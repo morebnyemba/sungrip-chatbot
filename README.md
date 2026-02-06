@@ -147,10 +147,17 @@ WhatsApp messaging:
 - **Message**: Individual messages
 - **MessageTemplate**: Reusable message templates
 
-#### WhatsApp Integration App
-WhatsApp Business API integration:
-- **WhatsAppConfig**: API configuration
-- **WebhookLog**: Webhook event logging
+#### Meta Integration App
+WhatsApp Business API integration (following reference repo conventions):
+- **MetaAppConfig**: API configuration with manager pattern
+- **WebhookEventLog**: Comprehensive webhook event logging
+
+#### Flows App
+Conversational flow management (following reference repo conventions):
+- **Flow**: Complete conversational flows with triggers
+- **FlowStep**: Individual steps in flows (send_message, question, action, etc.)
+- **FlowTransition**: Conditional transitions between steps
+- **FlowSession**: Active flow session tracking with context data
 
 ### Configuration
 
