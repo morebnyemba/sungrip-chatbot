@@ -1,5 +1,5 @@
 # Django Core
-Django==4.2.26  # Updated from 4.2.7 - Security patches for SQL injection and DoS vulnerabilities
+Django==4.2.28  # Updated to 4.2.28 - Latest security patches including SQL injection fixes
 djangorestframework==3.14.0
 django-cors-headers==4.3.1
 django-environ==0.11.2
