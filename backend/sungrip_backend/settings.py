@@ -59,7 +59,8 @@ INSTALLED_APPS = [
     'customers',
     'products',
     'orders',
-    'whatsapp_integration',
+    'meta_integration',
+    'flows',
 ]
 
 MIDDLEWARE = [
