@@ -5,15 +5,20 @@ from django.db import models
 
 
 class WhatsAppConfig(models.Model):
-    """WhatsApp Business API configuration"""
+    """WhatsApp Business API configuration
+    
+    NOTE: For production, consider encrypting sensitive fields (access_token, app_secret)
+    using django-encrypted-model-fields or similar encryption solutions.
+    """
     
     name = models.CharField(max_length=100, unique=True, default='default')
     
     # Meta/WhatsApp credentials
+    # TODO: Encrypt these fields in production
     phone_number_id = models.CharField(max_length=200)
     business_account_id = models.CharField(max_length=200)
-    access_token = models.CharField(max_length=500)
-    app_secret = models.CharField(max_length=200)
+    access_token = models.CharField(max_length=500, help_text="Consider encrypting this field")
+    app_secret = models.CharField(max_length=200, help_text="Consider encrypting this field")
     verify_token = models.CharField(max_length=200)
     
     # API settings
