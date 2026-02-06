@@ -1,5 +1,5 @@
 # Django Core
-Django==4.2.7
+Django==4.2.26  # Updated from 4.2.7 - Security patches for SQL injection and DoS vulnerabilities
 djangorestframework==3.14.0
 django-cors-headers==4.3.1
 django-environ==0.11.2
@@ -7,7 +7,7 @@ django-filter==23.5
 
 # Authentication
 djangorestframework-simplejwt==5.3.0
-djoser==2.2.2
+djoser==2.3.0  # Updated from 2.2.2 - Security patch for authentication bypass
 
 # Database
 psycopg2-binary==2.9.9
@@ -20,18 +20,18 @@ django-celery-beat==2.5.0
 
 # WhatsApp/Meta Integration
 requests==2.31.0
-cryptography==41.0.7
+cryptography==42.0.4  # Updated from 41.0.7 - Security patches for NULL pointer dereference and timing oracle attack
 
 # AI Integration
 google-generativeai==0.3.1
 
 # Utilities
 python-dotenv==1.0.0
-Pillow==10.1.0
+Pillow==10.3.0  # Updated from 10.1.0 - Security patch for buffer overflow vulnerability
 python-dateutil==2.8.2
 
 # Server
-gunicorn==21.2.0
+gunicorn==22.0.0  # Updated from 21.2.0 - Security patches for HTTP request/response smuggling
 daphne==4.0.0
 whitenoise==6.6.0
 
