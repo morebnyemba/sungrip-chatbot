@@ -138,6 +138,19 @@ def _process_incoming_message(webhook_log: WebhookEventLog, payload: Dict[str, A
 
     logger.info(f"Created message {message.id} from contact {contact.phone_number}")
 
+    # Mark message as read and send typing indicator (reference repo pattern)
+    try:
+        service = WhatsAppAPIService()
+        service.mark_message_as_read(message_id)
+        logger.info(f"Marked message {message_id} as read")
+
+        # Send typing indicator after marking as read
+        service.send_typing_indicator(from_number)
+        logger.info(f"Sent typing indicator to {from_number}")
+    except Exception as e:
+        # Don't fail message processing if read receipt or typing fails
+        logger.warning(f"Failed to mark as read or send typing: {str(e)}")
+
     # Trigger flow processing (if applicable)
     _trigger_flow_processing(contact, message, content)
 
