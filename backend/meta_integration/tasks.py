@@ -280,3 +280,33 @@ def mark_message_as_read_task(message_id: str, config_id: int = None):
     except Exception as e:
         logger.error(f"Error marking message as read: {str(e)}", exc_info=True)
         raise
+
+
+@shared_task
+def send_typing_indicator_task(phone_number: str, config_id: int = None):
+    """
+    Send typing indicator asynchronously.
+
+    The typing indicator is displayed for approximately 10 seconds or until
+    a message is sent to the user, whichever comes first.
+
+    Args:
+        phone_number: Recipient phone number in E.164 format
+        config_id: Optional MetaAppConfig ID. If None, uses active config.
+
+    Returns:
+        dict: API response
+    """
+    try:
+        config = None
+        if config_id:
+            config = MetaAppConfig.objects.get(id=config_id)
+
+        service = WhatsAppAPIService(config=config)
+        result = service.send_typing_indicator(phone_number)
+
+        logger.info(f"Typing indicator sent to {phone_number} via task")
+        return result
+    except Exception as e:
+        logger.error(f"Error sending typing indicator: {str(e)}", exc_info=True)
+        raise

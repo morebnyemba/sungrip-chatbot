@@ -119,7 +119,7 @@ class FlowProcessor:
             "text": {"body": "Hello!"}
         }
         """
-        from meta_integration.utils import send_whatsapp_message
+        from meta_integration.utils import send_whatsapp_message, send_typing_indicator
 
         message_config = step.config
         phone_number = self.contact.phone_number
@@ -127,6 +127,13 @@ class FlowProcessor:
         try:
             # Replace variables in message with context data
             message_config = self._replace_variables(message_config)
+
+            # Send typing indicator for a more natural experience
+            try:
+                send_typing_indicator(phone_number)
+            except Exception as e:
+                # Don't fail the whole message if typing indicator fails
+                logger.warning(f"Failed to send typing indicator: {str(e)}")
 
             # Send message
             result = send_whatsapp_message(phone_number, message_config)
@@ -155,7 +162,7 @@ class FlowProcessor:
             }
         }
         """
-        from meta_integration.utils import send_whatsapp_message
+        from meta_integration.utils import send_whatsapp_message, send_typing_indicator
 
         message_config = step.config.get("message_config", {})
         phone_number = self.contact.phone_number
@@ -163,6 +170,13 @@ class FlowProcessor:
         try:
             # Replace variables
             message_config = self._replace_variables(message_config)
+
+            # Send typing indicator for a more natural experience
+            try:
+                send_typing_indicator(phone_number)
+            except Exception as e:
+                # Don't fail the whole message if typing indicator fails
+                logger.warning(f"Failed to send typing indicator: {str(e)}")
 
             # Send question
             result = send_whatsapp_message(phone_number, message_config)

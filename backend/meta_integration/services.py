@@ -192,6 +192,44 @@ class WhatsAppAPIService:
             logger.error(f"Failed to mark message as read: {str(e)}")
             raise
 
+    def send_typing_indicator(self, to: str) -> Dict[str, Any]:
+        """
+        Send typing indicator to show "typing..." status.
+
+        The typing indicator is displayed for approximately 10 seconds or until
+        a message is sent to the user, whichever comes first.
+
+        Args:
+            to: Phone number in E.164 format (e.g., +263771234567)
+
+        Returns:
+            dict: API response
+
+        Example:
+            >>> service.send_typing_indicator("+263771234567")
+            {'success': True}
+        """
+        import requests
+
+        url = f"{self.base_url}/{self.config.phone_number_id}/messages"
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "typing_action",
+            "typing_action": {"status": "typing"}
+        }
+
+        try:
+            response = requests.post(url, headers=self.headers, json=payload, timeout=30)
+            response.raise_for_status()
+            result = response.json()
+            logger.info(f"Typing indicator sent to {to}")
+            return result
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to send typing indicator to {to}: {str(e)}")
+            raise
+
 
 class WebhookProcessor:
     """

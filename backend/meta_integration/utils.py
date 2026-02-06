@@ -135,6 +135,36 @@ def get_active_whatsapp_config() -> MetaAppConfig:
     return MetaAppConfig.objects.get_active_config()
 
 
+def send_typing_indicator(
+    phone_number: str,
+    config: Optional[MetaAppConfig] = None
+) -> Dict[str, Any]:
+    """
+    Send typing indicator to show "typing..." status to recipient.
+
+    The typing indicator is displayed for approximately 10 seconds or until
+    a message is sent to the user, whichever comes first. Useful for creating
+    a more natural conversation experience.
+
+    Args:
+        phone_number: Recipient phone number in E.164 format
+        config: MetaAppConfig instance. If None, uses the active config.
+
+    Returns:
+        dict: API response
+
+    Example:
+        >>> send_typing_indicator("+263771234567")
+        {'success': True}
+    """
+    try:
+        service = WhatsAppAPIService(config=config)
+        return service.send_typing_indicator(phone_number)
+    except Exception as e:
+        logger.error(f"Error sending typing indicator to {phone_number}: {str(e)}")
+        raise
+
+
 def format_phone_number(phone: str) -> str:
     """
     Format phone number to E.164 format.
