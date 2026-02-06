@@ -20,9 +20,12 @@ urlpatterns = [
     
     # API Endpoints
     path('api/', include('customers.urls')),
-    
-    # WhatsApp Webhook
-    # path('webhook/', include('whatsapp_integration.urls')),
+
+    # Meta/WhatsApp Integration Webhooks
+    path('meta/', include('meta_integration.urls')),
+
+    # Flow Management (optional API endpoints)
+    path('api/flows/', include('flows.urls')),
 ]
 
 # Serve media files in development
