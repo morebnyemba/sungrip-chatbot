@@ -91,6 +91,100 @@ class PaymentPlan(models.Model):
         return total_with_interest / self.number_of_installments
 
 
+class QuoteRequest(models.Model):
+    """Preliminary quote request from chatbot flow"""
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending Review'),
+        ('contacted', 'Customer Contacted'),
+        ('converted', 'Converted to Quote'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    # Link to customer if they exist in the system
+    customer = models.ForeignKey(
+        Customer, 
+        on_delete=models.CASCADE, 
+        related_name='quote_requests',
+        null=True,
+        blank=True,
+        help_text="Linked customer (if already in system)"
+    )
+    
+    # Link to contact from WhatsApp
+    contact = models.ForeignKey(
+        'conversations.Contact',
+        on_delete=models.CASCADE,
+        related_name='quote_requests',
+        null=True,
+        blank=True,
+        help_text="WhatsApp contact who made the request"
+    )
+    
+    # Request identification
+    request_id = models.CharField(
+        max_length=100, 
+        unique=True,
+        help_text="Unique request identifier"
+    )
+    
+    # Customer information from chatbot
+    customer_name = models.CharField(max_length=200, blank=True)
+    
+    # Quote request details from flow
+    monthly_bill = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        help_text="Customer's monthly electricity bill"
+    )
+    roof_type = models.CharField(
+        max_length=50, 
+        blank=True,
+        help_text="Type of roof (tile, asphalt, metal, etc.)"
+    )
+    location = models.CharField(
+        max_length=200, 
+        blank=True,
+        help_text="Customer location/address"
+    )
+    
+    # Status tracking
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        db_index=True
+    )
+    
+    # Link to generated quote if converted
+    quote = models.ForeignKey(
+        'Quote',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='source_requests',
+        help_text="Quote created from this request"
+    )
+    
+    # Notes
+    notes = models.TextField(blank=True)
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Quote Request'
+        verbose_name_plural = 'Quote Requests'
+    
+    def __str__(self):
+        customer_identifier = self.customer_name or (self.customer.full_name if self.customer else 'Unknown')
+        return f"Quote Request {self.request_id} - {customer_identifier}"
+
+
 class Quote(models.Model):
     """Customer quote for solar installation"""
     

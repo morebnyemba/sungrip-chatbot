@@ -121,21 +121,50 @@ def save_quote_request(contact, context: dict, params: dict) -> dict:
         - roof_type: Type of roof
         - location: Customer location
     """
+    from orders.models import QuoteRequest
+    from customers.models import Customer
+    
     save_to_var = params.get('save_to_variable', 'quote_request_saved')
     
     try:
+        # Generate unique request ID
+        request_id = f"QUOTE-{timezone.now().strftime('%Y%m%d%H%M%S')}"
+        
+        # Extract data from context
+        monthly_bill = context.get('monthly_bill')
+        roof_type = context.get('roof_type')
+        location = context.get('location')
+        customer_name = getattr(contact, 'profile_name', None) or getattr(contact, 'name', 'Unknown') if contact else 'Unknown'
+        
+        # Try to find or create customer
+        customer = None
+        if contact and hasattr(contact, 'customer'):
+            customer = contact.customer
+        
+        # Create QuoteRequest in database
+        quote_request_obj = QuoteRequest.objects.create(
+            customer=customer,
+            contact=contact,
+            request_id=request_id,
+            customer_name=customer_name,
+            monthly_bill=monthly_bill,
+            roof_type=roof_type,
+            location=location,
+            status='pending'
+        )
+        
         quote_request = {
-            'monthly_bill': context.get('monthly_bill'),
-            'roof_type': context.get('roof_type'),
-            'location': context.get('location'),
-            'customer_name': getattr(contact, 'name', 'Unknown') if contact else 'Unknown',
-            'timestamp': timezone.now().isoformat(),
-            'request_id': f"QUOTE-{timezone.now().strftime('%Y%m%d%H%M%S')}"
+            'success': True,
+            'id': quote_request_obj.id,
+            'request_id': request_id,
+            'monthly_bill': monthly_bill,
+            'roof_type': roof_type,
+            'location': location,
+            'customer_name': customer_name,
+            'timestamp': timezone.now().isoformat()
         }
         
-        # TODO: Store in database when Quote/QuoteRequest model is created
-        # For now, just log it
-        logger.info(f"Quote request saved: {quote_request}")
+        logger.info(f"Quote request saved to database: {quote_request}")
         
         context[save_to_var] = quote_request
         

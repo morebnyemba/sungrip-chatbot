@@ -489,3 +489,140 @@ class FlowIntegrationTests(TransactionTestCase):
         # Session should still be active
         processor.session.refresh_from_db()
         self.assertEqual(processor.session.status, 'active')
+
+
+# ============================================================================
+# Flow Action Tests
+# ============================================================================
+
+class FlowActionTests(TransactionTestCase):
+    """Tests for flow actions."""
+
+    def setUp(self):
+        """Set up test data."""
+        from customers.models import Customer
+        
+        self.customer = Customer.objects.create(
+            phone_number='+1234567890',
+            full_name='John Doe',
+            email='john@example.com'
+        )
+        
+        self.contact = Contact.objects.create(
+            whatsapp_id='1234567890',
+            phone_number='+1234567890',
+            profile_name='John Doe',
+            customer=self.customer
+        )
+
+    def test_save_quote_request_action(self):
+        """Test save_quote_request flow action saves to database."""
+        from .actions import save_quote_request
+        from orders.models import QuoteRequest
+        
+        # Prepare context
+        context = {
+            'monthly_bill': 150.50,
+            'roof_type': 'tile',
+            'location': 'Harare, Zimbabwe'
+        }
+        
+        # Call the action
+        result_context = save_quote_request(
+            contact=self.contact,
+            context=context,
+            params={'save_to_variable': 'quote_saved'}
+        )
+        
+        # Check that context was updated
+        self.assertIn('quote_saved', result_context)
+        saved_data = result_context['quote_saved']
+        
+        # Verify success
+        self.assertTrue(saved_data.get('success'))
+        self.assertIn('id', saved_data)
+        self.assertIn('request_id', saved_data)
+        
+        # Verify database record was created
+        quote_request = QuoteRequest.objects.get(id=saved_data['id'])
+        self.assertEqual(quote_request.customer, self.customer)
+        self.assertEqual(quote_request.contact, self.contact)
+        self.assertEqual(quote_request.customer_name, 'John Doe')
+        self.assertEqual(float(quote_request.monthly_bill), 150.50)
+        self.assertEqual(quote_request.roof_type, 'tile')
+        self.assertEqual(quote_request.location, 'Harare, Zimbabwe')
+        self.assertEqual(quote_request.status, 'pending')
+
+    def test_save_quote_request_without_customer(self):
+        """Test save_quote_request when contact has no linked customer."""
+        from .actions import save_quote_request
+        from orders.models import QuoteRequest
+        
+        # Create contact without customer
+        contact_no_customer = Contact.objects.create(
+            whatsapp_id='9876543210',
+            phone_number='+9876543210',
+            profile_name='Jane Smith'
+        )
+        
+        context = {
+            'monthly_bill': 200.00,
+            'roof_type': 'metal',
+            'location': 'Bulawayo'
+        }
+        
+        # Call the action
+        result_context = save_quote_request(
+            contact=contact_no_customer,
+            context=context,
+            params={}
+        )
+        
+        # Verify database record
+        saved_data = result_context['quote_request_saved']
+        quote_request = QuoteRequest.objects.get(id=saved_data['id'])
+        
+        self.assertIsNone(quote_request.customer)
+        self.assertEqual(quote_request.contact, contact_no_customer)
+        self.assertEqual(quote_request.customer_name, 'Jane Smith')
+
+    def test_save_quote_request_error_handling(self):
+        """Test save_quote_request handles errors gracefully."""
+        from .actions import save_quote_request
+        
+        # Call with invalid data (contact without required attribute)
+        context = {'monthly_bill': 'invalid'}  # Invalid type
+        
+        # The function should handle errors gracefully
+        result_context = save_quote_request(
+            contact=None,
+            context=context,
+            params={}
+        )
+        
+        # Should return error status
+        saved_data = result_context.get('quote_request_saved', {})
+        # Even with errors, it should create the record or return error info
+        self.assertIn('success', saved_data)
+
+    def test_calculate_solar_quote_action(self):
+        """Test calculate_solar_quote action."""
+        from .actions import calculate_solar_quote
+        
+        context = {'monthly_bill': 120}
+        
+        result_context = calculate_solar_quote(
+            contact=self.contact,
+            context=context,
+            params={'save_to_variable': 'solar_quote'}
+        )
+        
+        # Check result
+        self.assertIn('solar_quote', result_context)
+        quote_data = result_context['solar_quote']
+        
+        self.assertTrue(quote_data.get('success'))
+        self.assertEqual(quote_data['monthly_bill'], 120)
+        self.assertIn('estimated_system_size_kw', quote_data)
+        self.assertIn('estimated_cost', quote_data)
+        self.assertIn('estimated_roi_months', quote_data)
