@@ -3,13 +3,21 @@ URL configuration for flows app.
 
 Following conventions from morebnyemba/hanna and morebnyemba/whatsappcrm.
 """
-from django.urls import path
-from .views import FlowListView, FlowSessionView
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from . import views
 
 app_name = 'flows'
 
+# Create router for viewsets
+router = DefaultRouter()
+router.register(r'flows', views.FlowViewSet, basename='flow')
+router.register(r'steps', views.FlowStepViewSet, basename='step')
+router.register(r'transitions', views.FlowTransitionViewSet, basename='transition')
+router.register(r'sessions', views.FlowSessionViewSet, basename='session')
+router.register(r'whatsapp-flows', views.WhatsAppFlowViewSet, basename='whatsapp-flow')
+router.register(r'whatsapp-responses', views.WhatsAppFlowResponseViewSet, basename='whatsapp-response')
+
 urlpatterns = [
-    # Add flow-related endpoints here as needed
-    # path('list/', FlowListView.as_view(), name='flow_list'),
-    # path('session/<int:session_id>/', FlowSessionView.as_view(), name='flow_session'),
+    path('', include(router.urls)),
 ]

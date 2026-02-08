@@ -2,7 +2,7 @@
 Admin configuration for flows app
 """
 from django.contrib import admin
-from .models import Flow, FlowStep, FlowTransition, FlowSession
+from .models import Flow, FlowStep, FlowTransition, FlowSession, WhatsAppFlow, WhatsAppFlowResponse
 
 
 class FlowStepInline(admin.TabularInline):
@@ -96,6 +96,71 @@ class FlowSessionAdmin(admin.ModelAdmin):
         }),
         ('Timestamps', {
             'fields': ('started_at', 'updated_at', 'completed_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+class WhatsAppFlowResponseInline(admin.TabularInline):
+    model = WhatsAppFlowResponse
+    extra = 0
+    readonly_fields = ['contact', 'flow_token', 'is_processed', 'created_at']
+    fields = ['contact', 'flow_token', 'is_processed', 'created_at']
+    can_delete = False
+    show_change_link = True
+
+
+@admin.register(WhatsAppFlow)
+class WhatsAppFlowAdmin(admin.ModelAdmin):
+    list_display = ['friendly_name', 'name', 'sync_status', 'is_active', 'version', 'last_synced_at']
+    list_filter = ['sync_status', 'is_active', 'meta_app_config', 'created_at']
+    search_fields = ['name', 'friendly_name', 'description', 'flow_id']
+    readonly_fields = ['flow_id', 'created_at', 'updated_at', 'last_synced_at']
+    inlines = [WhatsAppFlowResponseInline]
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('name', 'friendly_name', 'description', 'is_active')
+        }),
+        ('Meta Integration', {
+            'fields': ('meta_app_config', 'flow_id', 'sync_status', 'sync_error')
+        }),
+        ('Flow Definition', {
+            'fields': ('flow_json', 'version', 'flow_definition')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at', 'last_synced_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_readonly_fields(self, request, obj=None):
+        if obj and obj.sync_status == 'published':
+            # Make flow_json readonly if published to prevent accidental modifications
+            return self.readonly_fields + ['flow_json']
+        return self.readonly_fields
+
+
+@admin.register(WhatsAppFlowResponse)
+class WhatsAppFlowResponseAdmin(admin.ModelAdmin):
+    list_display = ['whatsapp_flow', 'contact', 'is_processed', 'created_at', 'processed_at']
+    list_filter = ['is_processed', 'whatsapp_flow', 'created_at']
+    search_fields = ['contact__whatsapp_id', 'contact__name', 'flow_token', 'whatsapp_flow__name']
+    readonly_fields = ['whatsapp_flow', 'contact', 'flow_token', 'response_data', 'created_at', 'processed_at']
+    date_hierarchy = 'created_at'
+    
+    fieldsets = (
+        ('Response Information', {
+            'fields': ('whatsapp_flow', 'contact', 'flow_token', 'is_processed')
+        }),
+        ('Response Data', {
+            'fields': ('response_data',)
+        }),
+        ('Processing', {
+            'fields': ('processing_notes', 'processed_at')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at',),
             'classes': ('collapse',)
         }),
     )

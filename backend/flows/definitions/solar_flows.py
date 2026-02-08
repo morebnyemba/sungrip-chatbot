@@ -32,7 +32,7 @@ SOLAR_QUOTE_FLOW = {
         },
         {
             "name": "ask_monthly_bill",
-            "step_type": "question",
+            "type": "question",
             "config": {
                 "message_config": {
                     "message_type": "text",
@@ -56,7 +56,7 @@ SOLAR_QUOTE_FLOW = {
         },
         {
             "name": "ask_roof_type",
-            "step_type": "question",
+            "type": "question",
             "config": {
                 "message_config": {
                     "message_type": "text",
@@ -79,7 +79,7 @@ SOLAR_QUOTE_FLOW = {
         },
         {
             "name": "ask_location",
-            "step_type": "question",
+            "type": "question",
             "config": {
                 "message_config": {
                     "message_type": "text",
@@ -102,7 +102,7 @@ SOLAR_QUOTE_FLOW = {
         },
         {
             "name": "calculate_quote",
-            "step_type": "action",
+            "type": "action",
             "config": {
                 "action_type": "update_context",
                 "parameters": {
@@ -120,7 +120,7 @@ SOLAR_QUOTE_FLOW = {
         },
         {
             "name": "provide_quote",
-            "step_type": "send_message",
+            "type": "send_message",
             "config": {
                 "message_type": "text",
                 "text": {
@@ -141,7 +141,7 @@ SOLAR_QUOTE_FLOW = {
         },
         {
             "name": "end",
-            "step_type": "end_flow",
+            "type": "end_flow",
             "config": {}
         }
     ]
@@ -157,7 +157,7 @@ INSTALLATION_SCHEDULING_FLOW = {
     "steps": [
         {
             "name": "welcome",
-            "step_type": "send_message",
+            "type": "send_message",
             "is_entry_point": True,
             "config": {
                 "message_type": "text",
@@ -176,7 +176,7 @@ INSTALLATION_SCHEDULING_FLOW = {
         },
         {
             "name": "ask_preferred_date",
-            "step_type": "question",
+            "type": "question",
             "config": {
                 "message_config": {
                     "message_type": "text",
@@ -199,7 +199,7 @@ INSTALLATION_SCHEDULING_FLOW = {
         },
         {
             "name": "confirm_scheduling",
-            "step_type": "send_message",
+            "type": "send_message",
             "config": {
                 "message_type": "text",
                 "text": {
@@ -217,7 +217,7 @@ INSTALLATION_SCHEDULING_FLOW = {
         },
         {
             "name": "end",
-            "step_type": "end_flow",
+            "type": "end_flow",
             "config": {}
         }
     ]

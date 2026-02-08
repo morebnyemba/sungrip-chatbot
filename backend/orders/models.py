@@ -8,6 +8,89 @@ from customers.models import Customer
 from products.models import Product, SolarPackage
 
 
+class PaymentPlan(models.Model):
+    """Payment plan templates for solar packages"""
+    
+    PAYMENT_TERM_CHOICES = [
+        ('once_off', 'Once Off (100% upfront)'),
+        ('three_months', '3-Month Installment Plan'),
+        ('six_months', '6-Month Installment Plan'),
+        ('twelve_months', '12-Month Installment Plan'),
+    ]
+    
+    name = models.CharField(max_length=100)
+    payment_term = models.CharField(max_length=20, choices=PAYMENT_TERM_CHOICES)
+    description = models.TextField(blank=True)
+    
+    # Installment details
+    number_of_installments = models.IntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        help_text="Number of payment installments"
+    )
+    installment_interval_days = models.IntegerField(
+        default=0,
+        help_text="Days between installments (0 for once-off)"
+    )
+    
+    # Fees and interest
+    deposit_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text="Deposit required as percentage of total"
+    )
+    interest_rate_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text="Annual interest rate on installments"
+    )
+    administration_fee = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="One-time administration fee"
+    )
+    
+    # Applicability
+    applicable_packages = models.ManyToManyField(
+        SolarPackage,
+        blank=True,
+        related_name='payment_plans',
+        help_text="Packages this payment plan applies to (leave empty for all)"
+    )
+    
+    # Status
+    is_active = models.BooleanField(default=True)
+    display_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['display_order', 'payment_term']
+        verbose_name = 'Payment Plan'
+        verbose_name_plural = 'Payment Plans'
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_payment_term_display()})"
+    
+    def calculate_installment_amount(self, total_amount):
+        """Calculate per-installment amount including interest"""
+        if self.number_of_installments == 1:
+            return total_amount
+        
+        # Simple interest calculation
+        annual_rate = self.interest_rate_percent / 100
+        monthly_rate = annual_rate / 12
+        
+        # Amount after adding interest
+        total_with_interest = total_amount * (1 + (annual_rate * (self.number_of_installments / 12)))
+        
+        # Per-installment amount
+        return total_with_interest / self.number_of_installments
+
+
 class Quote(models.Model):
     """Customer quote for solar installation"""
     
@@ -23,6 +106,9 @@ class Quote(models.Model):
     # System recommendation
     recommended_system_size_kw = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     recommended_package = models.ForeignKey(SolarPackage, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Payment plan
+    payment_plan = models.ForeignKey(PaymentPlan, on_delete=models.SET_NULL, null=True, blank=True, related_name='quotes')
     
     # Pricing
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -92,6 +178,9 @@ class Order(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='orders')
     quote = models.ForeignKey(Quote, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
     order_number = models.CharField(max_length=50, unique=True)
+    
+    # Payment plan
+    payment_plan = models.ForeignKey(PaymentPlan, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
     
     # Pricing
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -231,3 +320,54 @@ class Installation(models.Model):
     def __str__(self):
         return f"Installation for {self.customer.full_name} - {self.system_size_kw}kW"
 
+
+class PaymentSchedule(models.Model):
+    """Individual payment schedule for installment plans"""
+    
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('due', 'Due'),
+        ('partial', 'Partially Paid'),
+        ('paid', 'Paid'),
+        ('overdue', 'Overdue'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='payment_schedule')
+    payment_number = models.IntegerField(help_text="Payment sequence number (1, 2, 3...)")
+    
+    # Amount
+    due_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    
+    # Dates
+    due_date = models.DateField()
+    paid_date = models.DateField(null=True, blank=True)
+    
+    # Status
+    status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
+    
+    # Notes
+    notes = models.TextField(blank=True)
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['payment_number']
+        unique_together = ['order', 'payment_number']
+        verbose_name = 'Payment Schedule'
+        verbose_name_plural = 'Payment Schedules'
+    
+    def __str__(self):
+        return f"Payment {self.payment_number} - {self.order.order_number} ({self.get_status_display()})"
+    
+    @property
+    def balance_due(self):
+        return self.due_amount - self.paid_amount
+    
+    @property
+    def is_overdue(self):
+        from django.utils import timezone
+        return self.status in ['pending', 'due'] and self.due_date < timezone.now().date()

@@ -45,6 +45,8 @@ def process_webhook_event_task(self, webhook_log_id: int):
             result = _process_incoming_message(webhook_log, payload)
         elif webhook_log.event_type == "message_status":
             result = _process_message_status(webhook_log, payload)
+        elif webhook_log.event_type == "flow_response":
+            result = _process_flow_response(webhook_log, payload)
         else:
             result = {"status": "ignored", "reason": f"Event type {webhook_log.event_type} not processed"}
 
@@ -238,6 +240,111 @@ def _trigger_flow_processing(contact, message, content: str):
             from flows.services import FlowProcessor
             processor = FlowProcessor.start_flow(triggered_flow, contact)
             logger.info(f"Started flow {triggered_flow.name} for contact {contact.phone_number}")
+
+
+def _process_flow_response(webhook_log: WebhookEventLog, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Process a WhatsApp Flow response from webhook payload.
+
+    Args:
+        webhook_log: WebhookEventLog instance
+        payload: Webhook payload dict
+
+    Returns:
+        dict: Processing result
+    """
+    from conversations.models import Contact
+    from flows.models import WhatsAppFlow
+    from flows.whatsapp_flow_response_processor import WhatsAppFlowResponseProcessor
+
+    try:
+        # Extract flow response data from webhook
+        # Meta sends flow responses in the 'messages' array with type 'interactive'
+        # and subtype 'nfm_reply' (New Flow Message reply)
+        messages = payload.get('entry', [{}])[0].get('changes', [{}])[0].get('value', {}).get('messages', [])
+        
+        if not messages:
+            return {"status": "error", "message": "No messages in flow response payload"}
+        
+        message = messages[0]
+        from_number = message.get('from')
+        message_type = message.get('type')
+        
+        if message_type != 'interactive':
+            return {"status": "error", "message": f"Expected interactive message type, got {message_type}"}
+        
+        interactive_data = message.get('interactive', {})
+        interactive_type = interactive_data.get('type')
+        
+        if interactive_type != 'nfm_reply':
+            return {"status": "error", "message": f"Expected nfm_reply type, got {interactive_type}"}
+        
+        nfm_reply = interactive_data.get('nfm_reply', {})
+        flow_token = nfm_reply.get('response_json', '')
+        
+        # Parse the response JSON
+        import json
+        try:
+            response_data = json.loads(flow_token) if isinstance(flow_token, str) else flow_token
+        except json.JSONDecodeError:
+            response_data = nfm_reply
+        
+        # Get the flow ID from the webhook
+        flow_id = nfm_reply.get('name')  # The flow ID is in the 'name' field
+        
+        if not flow_id:
+            return {"status": "error", "message": "No flow ID in response"}
+        
+        # Get or create contact
+        contact, created = Contact.objects.get_or_create(
+            phone_number=from_number,
+            defaults={
+                "name": from_number  # Will be updated if we have profile info
+            }
+        )
+        
+        # Find the WhatsAppFlow by flow_id
+        try:
+            whatsapp_flow = WhatsAppFlow.objects.get(flow_id=flow_id)
+        except WhatsAppFlow.DoesNotExist:
+            logger.error(f"WhatsAppFlow with flow_id {flow_id} not found")
+            return {
+                "status": "error",
+                "message": f"WhatsApp Flow {flow_id} not found in database"
+            }
+        
+        # Process the flow response
+        result = WhatsAppFlowResponseProcessor.process_response(
+            whatsapp_flow=whatsapp_flow,
+            contact=contact,
+            response_data=response_data
+        )
+        
+        if result and result.get('success'):
+            logger.info(
+                f"Successfully processed flow response from {from_number} "
+                f"for flow {whatsapp_flow.name}"
+            )
+            return {
+                "status": "success",
+                "contact_id": contact.id,
+                "whatsapp_flow_id": whatsapp_flow.id,
+                "notes": result.get('notes', 'Flow response processed')
+            }
+        else:
+            error_msg = result.get('notes', 'Unknown error') if result else 'Processing failed'
+            logger.error(f"Failed to process flow response: {error_msg}")
+            return {
+                "status": "error",
+                "message": error_msg
+            }
+            
+    except Exception as e:
+        logger.error(f"Error processing flow response: {str(e)}", exc_info=True)
+        return {
+            "status": "error",
+            "message": f"Exception: {str(e)}"
+        }
 
 
 @shared_task
