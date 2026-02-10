@@ -5,13 +5,38 @@ Following conventions from morebnyemba/hanna and morebnyemba/whatsappcrm.
 Handles flow execution, step processing, and transition evaluation.
 """
 import logging
+import re
+import ast
+import operator
 from typing import Optional, Dict, Any
 from django.utils import timezone
+from django.db import transaction
 
 from .models import Flow, FlowStep, FlowTransition, FlowSession
 from conversations.models import Contact, Message
 
 logger = logging.getLogger(__name__)
+
+# Safe operators for condition evaluation
+SAFE_OPERATORS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+    ast.Eq: operator.eq,
+    ast.NotEq: operator.ne,
+    ast.Lt: operator.lt,
+    ast.LtE: operator.le,
+    ast.Gt: operator.gt,
+    ast.GtE: operator.ge,
+    ast.And: operator.and_,
+    ast.Or: operator.or_,
+    ast.Not: operator.not_,
+    ast.In: lambda x, y: x in y,
+    ast.NotIn: lambda x, y: x not in y,
+}
 
 
 class FlowProcessor:
@@ -43,8 +68,8 @@ class FlowProcessor:
         Returns:
             FlowProcessor: Initialized processor with new session
         """
-        # Check for existing active session
-        existing_session = FlowSession.objects.filter(
+        # Check for existing active session with row lock
+        existing_session = FlowSession.objects.select_for_update().filter(
             contact=contact,
             status='active'
         ).first()
@@ -314,6 +339,7 @@ class FlowProcessor:
             logger.error(f"Target flow {target_flow_name} not found")
             self._handle_error(f"Flow {target_flow_name} not found")
 
+    @transaction.atomic
     def process_user_reply(self, reply_text: str):
         """
         Process a user reply within the current flow.
@@ -321,11 +347,18 @@ class FlowProcessor:
         Args:
             reply_text: User's message text
         """
+        # Reload session with lock to prevent race conditions
+        self.session = FlowSession.objects.select_for_update().get(pk=self.session.pk)
+        
         if not self.session.current_step:
             logger.warning(f"No current step for session {self.session.id}")
             return
 
         step = self.session.current_step
+        
+        # Store the last reply in context for transition evaluation
+        self.session.context_data['_last_user_reply'] = reply_text
+        self.session.save()
 
         # Handle based on step type
         if step.step_type == 'question':
@@ -435,30 +468,101 @@ class FlowProcessor:
             return True
         elif condition_type == "user_reply_matches":
             # Check if user reply matches pattern
-            # This would need the actual reply context
-            return True
+            return self._check_user_reply_matches(condition_config)
+        elif condition_type == "context_variable_equals":
+            # Check if a context variable equals a specific value
+            var_name = condition_config.get("variable")
+            expected_value = condition_config.get("value")
+            actual_value = self.session.context_data.get(var_name)
+            return actual_value == expected_value
         else:
             return False
+    
+    def _check_user_reply_matches(self, condition_config: Dict[str, Any]) -> bool:
+        """
+        Check if the last user reply matches the specified pattern.
+        
+        Args:
+            condition_config: Condition configuration with pattern/keywords
+            
+        Returns:
+            bool: True if reply matches
+        """
+        last_reply = self.session.context_data.get('_last_user_reply', '')
+        if not last_reply:
+            return False
+        
+        last_reply_lower = last_reply.lower().strip()
+        
+        # Check pattern match (regex)
+        pattern = condition_config.get("pattern")
+        if pattern:
+            try:
+                if re.search(pattern, last_reply, re.IGNORECASE):
+                    return True
+            except re.error as e:
+                logger.error(f"Invalid regex pattern '{pattern}': {e}")
+                return False
+        
+        # Check keyword match (exact or contains)
+        keywords = condition_config.get("keywords", [])
+        if keywords:
+            match_type = condition_config.get("match_type", "contains")  # "exact" or "contains"
+            if match_type == "exact":
+                return last_reply_lower in [k.lower() for k in keywords]
+            else:  # contains
+                return any(k.lower() in last_reply_lower for k in keywords)
+        
+        return False
 
     def _replace_variables(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Replace variables in config with context data.
 
-        Variables format: {{variable_name}}
+        Variables format: {{variable_name}} or {{nested.key}}
         """
         import json
-        import re
 
         config_str = json.dumps(config)
 
-        # Find all variables
-        variables = re.findall(r'\{\{(\w+)\}\}', config_str)
+        # Find all variables (supports nested keys like {{user.name}})
+        variables = re.findall(r'\{\{([\w\.]+)\}\}', config_str)
 
         for var in variables:
-            value = self.session.context_data.get(var, '')
+            # Support nested key access
+            value = self._get_nested_value(var)
+            
+            # Escape special JSON characters in value
+            if isinstance(value, str):
+                # Escape quotes and backslashes for JSON safety
+                value = value.replace('\\', '\\\\').replace('"', '\\"')
+            
             config_str = config_str.replace(f'{{{{{var}}}}}', str(value))
 
         return json.loads(config_str)
+    
+    def _get_nested_value(self, key_path: str) -> Any:
+        """
+        Get a value from context data supporting nested keys.
+        
+        Args:
+            key_path: Key path like "user.name" or "monthly_bill"
+            
+        Returns:
+            Value from context or empty string if not found
+        """
+        keys = key_path.split('.')
+        value = self.session.context_data
+        
+        try:
+            for key in keys:
+                if isinstance(value, dict):
+                    value = value.get(key, '')
+                else:
+                    return ''
+            return value if value is not None else ''
+        except (KeyError, AttributeError, TypeError):
+            return ''
 
     def _parse_reply(self, reply_text: str, expected_type: str, validation: Dict[str, Any]):
         """
@@ -498,26 +602,100 @@ class FlowProcessor:
 
     def _evaluate_condition(self, condition: str) -> bool:
         """
-        Evaluate a condition expression.
+        Safely evaluate a condition expression using AST.
 
         Args:
-            condition: Condition string (e.g., "context_data.monthly_bill > 100")
+            condition: Condition string (e.g., "monthly_bill > 100" or "monthly_bill > 100 and roof_type == 'tile'")
 
         Returns:
             bool: Evaluation result
+            
+        Supported operators:
+            - Comparisons: ==, !=, <, <=, >, >=
+            - Logical: and, or, not
+            - Membership: in, not in
+            - Arithmetic: +, -, *, /, %, **
         """
-        # Simple condition evaluation
-        # In production, use a safe expression evaluator
         try:
-            # Replace context_data with actual data
-            context_data = self.session.context_data
-            # Evaluate safely (in production, use ast.literal_eval or similar)
-            # For now, just log and return True
-            logger.info(f"Condition evaluation: {condition} with context {context_data}")
-            return True
-        except Exception as e:
-            logger.error(f"Error evaluating condition: {str(e)}")
+            # Parse condition to AST
+            tree = ast.parse(condition, mode='eval')
+            
+            # Evaluate the AST safely
+            result = self._eval_ast_node(tree.body)
+            
+            logger.info(f"Condition '{condition}' evaluated to {result}")
+            return bool(result)
+            
+        except SyntaxError as e:
+            logger.error(f"Invalid condition syntax '{condition}': {e}")
             return False
+        except Exception as e:
+            logger.error(f"Error evaluating condition '{condition}': {str(e)}")
+            return False
+    
+    def _eval_ast_node(self, node):
+        """
+        Safely evaluate an AST node.
+        
+        This implementation only allows safe operations and prevents code execution.
+        """
+        if isinstance(node, ast.Constant):  # Python 3.8+
+            return node.value
+        elif isinstance(node, ast.Num):  # Fallback for older Python
+            return node.n
+        elif isinstance(node, ast.Str):  # Fallback for older Python
+            return node.s
+        elif isinstance(node, ast.Name):
+            # Look up variable in context data
+            return self.session.context_data.get(node.id, None)
+        elif isinstance(node, ast.BinOp):
+            # Binary operation (e.g., +, -, *, /)
+            left = self._eval_ast_node(node.left)
+            right = self._eval_ast_node(node.right)
+            op_type = type(node.op)
+            if op_type in SAFE_OPERATORS:
+                return SAFE_OPERATORS[op_type](left, right)
+            else:
+                raise ValueError(f"Unsupported operator: {op_type}")
+        elif isinstance(node, ast.UnaryOp):
+            # Unary operation (e.g., not, -)
+            operand = self._eval_ast_node(node.operand)
+            op_type = type(node.op)
+            if op_type in SAFE_OPERATORS:
+                return SAFE_OPERATORS[op_type](operand)
+            else:
+                raise ValueError(f"Unsupported unary operator: {op_type}")
+        elif isinstance(node, ast.Compare):
+            # Comparison (e.g., <, >, ==)
+            left = self._eval_ast_node(node.left)
+            for op, comparator in zip(node.ops, node.comparators):
+                right = self._eval_ast_node(comparator)
+                op_type = type(op)
+                if op_type in SAFE_OPERATORS:
+                    result = SAFE_OPERATORS[op_type](left, right)
+                    if not result:
+                        return False
+                    left = right  # Chain comparisons
+                else:
+                    raise ValueError(f"Unsupported comparison operator: {op_type}")
+            return True
+        elif isinstance(node, ast.BoolOp):
+            # Boolean operation (and, or)
+            op_type = type(node.op)
+            if op_type == ast.And:
+                return all(self._eval_ast_node(val) for val in node.values)
+            elif op_type == ast.Or:
+                return any(self._eval_ast_node(val) for val in node.values)
+            else:
+                raise ValueError(f"Unsupported boolean operator: {op_type}")
+        elif isinstance(node, ast.List):
+            # List literal
+            return [self._eval_ast_node(elt) for elt in node.elts]
+        elif isinstance(node, ast.Tuple):
+            # Tuple literal
+            return tuple(self._eval_ast_node(elt) for elt in node.elts)
+        else:
+            raise ValueError(f"Unsupported AST node type: {type(node)}")
 
     def _action_create_order(self, parameters: Dict[str, Any]):
         """Execute create_order action."""

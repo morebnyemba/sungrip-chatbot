@@ -102,6 +102,10 @@ class SolarPackage(models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField()
     
+    # Images
+    image = models.ImageField(upload_to='solar_packages/', null=True, blank=True)
+    image_url = models.URLField(blank=True, help_text="External image URL (if no image uploaded)")
+    
     # System sizing
     system_size_kw = models.DecimalField(max_digits=6, decimal_places=2, help_text="System size in kW")
     recommended_for = models.CharField(

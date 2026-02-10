@@ -21,6 +21,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+
 # SECURITY WARNING: keep the secret key used in production secret!
 # Generate a secure key with: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
 SECRET_KEY = os.environ.get('SECRET_KEY')
@@ -30,9 +33,6 @@ if not SECRET_KEY:
     # Only use default in development
     SECRET_KEY = 'django-insecure-j_(9jg08huqliegd!2z=(v%@kex8l&l*cdi+5l=)pnb4=cao+5'
     print("WARNING: Using default SECRET_KEY. Set SECRET_KEY environment variable in production!")
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'django_celery_beat',
+    'django_extensions',  # For runscript command
     
     # Local apps
     'conversations',
@@ -98,16 +99,26 @@ WSGI_APPLICATION = 'sungrip_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'sungrip_db'),
-        'USER': os.environ.get('DB_USER', 'sungrip_user'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'sungrip_password'),
-        'HOST': os.environ.get('DB_HOST', 'db'),
-        'PORT': os.environ.get('DB_PORT', '5432'),
+# Use SQLite for testing, PostgreSQL for production
+import sys
+if 'test' in sys.argv:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': ':memory:',
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('DB_NAME', 'sungrip_db'),
+            'USER': os.environ.get('DB_USER', 'sungrip_user'),
+            'PASSWORD': os.environ.get('DB_PASSWORD', 'sungrip_password'),
+            'HOST': os.environ.get('DB_HOST', 'db'),
+            'PORT': os.environ.get('DB_PORT', '5432'),
+        }
+    }
 
 
 # Password validation

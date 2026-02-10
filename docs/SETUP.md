@@ -7,8 +7,9 @@
 4. [WhatsApp Configuration](#whatsapp-configuration)
 5. [Environment Variables](#environment-variables)
 6. [Database Setup](#database-setup)
-7. [Production Deployment](#production-deployment)
-8. [Troubleshooting](#troubleshooting)
+7. [Dependency Management](#dependency-management)
+8. [Production Deployment](#production-deployment)
+9. [Troubleshooting](#troubleshooting)
 
 ## Prerequisites
 
@@ -198,7 +199,6 @@ WHATSAPP_VERIFY_TOKEN=<your-custom-token>
 ```
 
 ### Optional Variables
-
 ```env
 # AI Features
 GOOGLE_AI_API_KEY=<your-google-ai-key>
@@ -211,6 +211,37 @@ EMAIL_HOST_PASSWORD=<your-app-password>
 
 # CORS
 CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+```
+
+## Dependency Management
+
+### Backend (Python)
+
+The backend uses pinned versions in [backend/requirements.txt](backend/requirements.txt).
+
+Security audit:
+
+```bash
+cd backend
+pip install pip-audit
+pip-audit -r requirements.txt
+```
+
+Optional lock file for deployments:
+
+```bash
+cd backend
+pip freeze > requirements-locked.txt
+```
+
+### Frontend (Node.js)
+
+When the frontend is in use:
+
+```bash
+cd frontend
+npm audit
+npm audit fix
 ```
 
 ## Database Setup
