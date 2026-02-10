@@ -12,6 +12,11 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from flows.models import Flow, FlowStep, FlowTransition
 from flows.definitions.solar_flows import SOLAR_QUOTE_FLOW, INSTALLATION_SCHEDULING_FLOW
+from flows.definitions.main_menu_flow import (
+    MAIN_MENU_FLOW,
+    PACKAGE_VIEWING_FLOW,
+    ASSESSMENT_BOOKING_FLOW,
+)
 
 
 class Command(BaseCommand):
@@ -25,6 +30,9 @@ class Command(BaseCommand):
         flow_definitions = [
             SOLAR_QUOTE_FLOW,
             INSTALLATION_SCHEDULING_FLOW,
+            MAIN_MENU_FLOW,
+            PACKAGE_VIEWING_FLOW,
+            ASSESSMENT_BOOKING_FLOW,
         ]
 
         for flow_def in flow_definitions:
