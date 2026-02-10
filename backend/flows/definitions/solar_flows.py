@@ -15,7 +15,7 @@ MAIN_MENU_FLOW = {
     "steps": [
         {
             "name": "welcome",
-            "step_type": "send_message",
+            "type": "send_message",
             "is_entry_point": True,
             "config": {
                 "message_type": "text",
@@ -161,7 +161,7 @@ SOLAR_QUOTE_FLOW = {
     "steps": [
         {
             "name": "welcome",
-            "step_type": "send_message",
+            "type": "send_message",
             "is_entry_point": True,
             "config": {
                 "message_type": "text",
@@ -373,6 +373,9 @@ INSTALLATION_SCHEDULING_FLOW = {
 
 
 # Solar Packages Flow - Display available packages
+# NOTE: Package details and pricing are currently hardcoded in the message.
+# For production, consider implementing a webhook action to fetch package data
+# dynamically from the SolarPackage model to ensure accuracy when prices change.
 SOLAR_PACKAGES_FLOW = {
     "name": "solar_packages",
     "friendly_name": "Solar Packages",
@@ -382,7 +385,7 @@ SOLAR_PACKAGES_FLOW = {
     "steps": [
         {
             "name": "welcome",
-            "step_type": "send_message",
+            "type": "send_message",
             "is_entry_point": True,
             "config": {
                 "message_type": "text",
@@ -560,7 +563,7 @@ CONTACT_SUPPORT_FLOW = {
     "steps": [
         {
             "name": "welcome",
-            "step_type": "send_message",
+            "type": "send_message",
             "is_entry_point": True,
             "config": {
                 "message_type": "text",
@@ -667,7 +670,7 @@ CONTACT_SUPPORT_FLOW = {
                            "📞 Contact: {{contact_method}}\n\n"
                            "Our support team will get back to you within 24 hours.\n\n"
                            "For urgent matters, please call us at:\n"
-                           "📱 +1 (555) 123-4567\n\n"
+                           "📱 +263 123 456 789\n\n"
                            "Type 'menu' to return to the main menu."
                 }
             },
