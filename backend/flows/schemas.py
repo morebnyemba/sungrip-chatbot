@@ -265,8 +265,28 @@ def validate_step_config(step_type: str, config: Dict[str, Any]) -> Dict[str, An
     Raises:
         ValueError: If validation fails
     """
-    schema = StepConfigUnion(step_type=step_type, config=config)
-    return schema.config
+    if not isinstance(config, dict):
+        raise ValueError("config must be a dictionary")
+
+    known_step_types = {
+        'send_message',
+        'question',
+        'wait_for_reply',
+        'trigger_flow',
+        'whatsapp_template',
+        'webhook_call',
+    }
+
+    # Pass through configs for extended step types not covered by the union schema
+    if step_type not in known_step_types:
+        return config
+
+    try:
+        schema = StepConfigUnion(step_type=step_type, config=config)
+        return schema.config
+    except Exception as e:
+        logger.error(f"Step config validation failed: {str(e)}")
+        raise ValueError(f"Invalid step config for type '{step_type}': {str(e)}")
 
 
 def validate_transition_config(
@@ -284,7 +304,19 @@ def validate_transition_config(
     Raises:
         ValueError: If validation fails
     """
+    if not isinstance(transition_config, dict):
+        raise ValueError("Transition config must be a dictionary")
+
+    condition_types = {'auto', 'condition_true', 'condition_false', 'user_reply_matches', 'context_variable_equals'}
+
     try:
+        # If this already looks like a condition config (common in our flows), validate it directly.
+        if 'condition_config' not in transition_config and (
+            transition_config.get('type') in condition_types or 'type' not in transition_config
+        ):
+            condition = ConditionConfig(**transition_config)
+            return condition.model_dump(exclude_unset=True)
+
         schema = TransitionConfigSchema(**transition_config)
         return schema.model_dump(exclude_unset=True)
     except Exception as e:

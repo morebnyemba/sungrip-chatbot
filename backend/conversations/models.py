@@ -12,6 +12,7 @@ class Contact(models.Model):
     whatsapp_id = models.CharField(max_length=100, unique=True, help_text="WhatsApp phone number ID")
     phone_number = models.CharField(max_length=20)
     profile_name = models.CharField(max_length=200, blank=True)
+    source = models.CharField(max_length=50, default='whatsapp', help_text="Channel source for this contact (e.g., whatsapp)")
     
     # Status
     is_blocked = models.BooleanField(default=False)
@@ -199,4 +200,3 @@ class MessageTemplate(models.Model):
     
     def __str__(self):
         return f"{self.name} ({self.language})"
-
