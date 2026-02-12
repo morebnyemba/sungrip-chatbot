@@ -14,7 +14,13 @@ For loading multiple flows from definitions, use: python manage.py load_flow_def
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from flows.models import Flow, FlowStep, FlowTransition
-from flows.definitions.solar_flows import SOLAR_QUOTE_FLOW, INSTALLATION_SCHEDULING_FLOW
+from flows.definitions.solar_flows import (
+    MAIN_MENU_FLOW,
+    SOLAR_QUOTE_FLOW,
+    INSTALLATION_SCHEDULING_FLOW,
+    SOLAR_PACKAGES_FLOW,
+    CONTACT_SUPPORT_FLOW
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -27,7 +33,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--flow',
             type=str,
-            choices=['solar_quote', 'installation_scheduling', 'all'],
+            choices=['main_menu', 'solar_quote', 'installation_scheduling', 'solar_packages', 'contact_support', 'all'],
             default='all',
             help='Which flow to create (default: all)'
         )
@@ -38,10 +44,16 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("--- Starting Solar Flow Creation Script ---"))
 
         flows_to_create = []
+        if flow_choice in ['main_menu', 'all']:
+            flows_to_create.append(MAIN_MENU_FLOW)
         if flow_choice in ['solar_quote', 'all']:
             flows_to_create.append(SOLAR_QUOTE_FLOW)
         if flow_choice in ['installation_scheduling', 'all']:
             flows_to_create.append(INSTALLATION_SCHEDULING_FLOW)
+        if flow_choice in ['solar_packages', 'all']:
+            flows_to_create.append(SOLAR_PACKAGES_FLOW)
+        if flow_choice in ['contact_support', 'all']:
+            flows_to_create.append(CONTACT_SUPPORT_FLOW)
 
         if not flows_to_create:
             raise CommandError(f"No flows selected for creation with choice '{flow_choice}'.")

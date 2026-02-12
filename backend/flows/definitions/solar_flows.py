@@ -1,9 +1,157 @@
 """
-Solar quote request flow definition.
+Solar quote request flow definitions.
 
-This flow guides customers through the process of requesting a solar system quote.
+This module contains all conversational flow definitions for Sungrip Solar chatbot.
+Includes main menu, quote request, installation scheduling, solar packages, and support flows.
 """
 
+# Main Menu Flow - Entry point for users
+MAIN_MENU_FLOW = {
+    "name": "main_menu",
+    "friendly_name": "Main Menu",
+    "description": "Main menu for Sungrip Solar chatbot - presents users with service options",
+    "is_active": True,
+    "trigger_keywords": ["menu", "start", "hello", "hi", "help", "options"],
+    "steps": [
+        {
+            "name": "welcome",
+            "type": "send_message",
+            "is_entry_point": True,
+            "config": {
+                "message_type": "text",
+                "text": {
+                    "body": "🌞 Welcome to Sungrip Solar! ☀️\n\n"
+                           "We're here to help you with solar energy solutions. "
+                           "How can we assist you today?\n\n"
+                           "Please select an option:\n"
+                           "1️⃣ Request a Quote\n"
+                           "2️⃣ Schedule Installation\n"
+                           "3️⃣ View Solar Packages\n"
+                           "4️⃣ Contact Support\n\n"
+                           "Reply with the number of your choice (1-4)."
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "handle_choice",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "handle_choice",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "text",
+                    "text": {
+                        "body": "Please enter your choice (1-4):"
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "text",
+                    "context_variable": "menu_choice"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "route_to_quote",
+                    "condition_config": {
+                        "type": "expression",
+                        "expression": "menu_choice in ['1', 'quote', 'request quote']"
+                    },
+                    "priority": 1
+                },
+                {
+                    "to_step": "route_to_installation",
+                    "condition_config": {
+                        "type": "expression",
+                        "expression": "menu_choice in ['2', 'schedule', 'installation']"
+                    },
+                    "priority": 2
+                },
+                {
+                    "to_step": "route_to_packages",
+                    "condition_config": {
+                        "type": "expression",
+                        "expression": "menu_choice in ['3', 'packages', 'view packages']"
+                    },
+                    "priority": 3
+                },
+                {
+                    "to_step": "route_to_support",
+                    "condition_config": {
+                        "type": "expression",
+                        "expression": "menu_choice in ['4', 'support', 'help']"
+                    },
+                    "priority": 4
+                },
+                {
+                    "to_step": "invalid_choice",
+                    "condition_config": {"type": "auto"},
+                    "priority": 5
+                }
+            ]
+        },
+        {
+            "name": "route_to_quote",
+            "type": "switch_flow",
+            "config": {
+                "target_flow": "solar_quote_request",
+                "message": "Great! Let me help you get a quote. 📋"
+            },
+            "transitions": []
+        },
+        {
+            "name": "route_to_installation",
+            "type": "switch_flow",
+            "config": {
+                "target_flow": "installation_scheduling",
+                "message": "Perfect! Let's schedule your installation. 📅"
+            },
+            "transitions": []
+        },
+        {
+            "name": "route_to_packages",
+            "type": "switch_flow",
+            "config": {
+                "target_flow": "solar_packages",
+                "message": "Let me show you our available solar packages. 📦"
+            },
+            "transitions": []
+        },
+        {
+            "name": "route_to_support",
+            "type": "switch_flow",
+            "config": {
+                "target_flow": "contact_support",
+                "message": "I'll connect you with our support team. 👥"
+            },
+            "transitions": []
+        },
+        {
+            "name": "invalid_choice",
+            "type": "send_message",
+            "config": {
+                "message_type": "text",
+                "text": {
+                    "body": "I'm sorry, I didn't understand that. Please reply with a number from 1 to 4."
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "handle_choice",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        }
+    ]
+}
+
+
+# Solar Quote Request Flow
 SOLAR_QUOTE_FLOW = {
     "name": "solar_quote_request",
     "friendly_name": "Solar Quote Request",
@@ -13,7 +161,7 @@ SOLAR_QUOTE_FLOW = {
     "steps": [
         {
             "name": "welcome",
-            "step_type": "send_message",
+            "type": "send_message",
             "is_entry_point": True,
             "config": {
                 "message_type": "text",
@@ -205,6 +353,325 @@ INSTALLATION_SCHEDULING_FLOW = {
                 "text": {
                     "body": "Thank you! I've noted your preference for {{preferred_date}}. "
                            "Our installation team will contact you within 24 hours to confirm the exact time."
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "end",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "end",
+            "type": "end_flow",
+            "config": {}
+        }
+    ]
+}
+
+
+# Solar Packages Flow - Display available packages
+# NOTE: Package details and pricing are currently hardcoded in the message.
+# For production, consider implementing a webhook action to fetch package data
+# dynamically from the SolarPackage model to ensure accuracy when prices change.
+SOLAR_PACKAGES_FLOW = {
+    "name": "solar_packages",
+    "friendly_name": "Solar Packages",
+    "description": "Displays available solar system packages to customers",
+    "is_active": True,
+    "trigger_keywords": ["packages", "systems", "options", "what do you have"],
+    "steps": [
+        {
+            "name": "welcome",
+            "type": "send_message",
+            "is_entry_point": True,
+            "config": {
+                "message_type": "text",
+                "text": {
+                    "body": "☀️ Sungrip Solar Packages ☀️\n\n"
+                           "We offer various solar packages to meet your needs:\n\n"
+                           "📦 SMALL HOME PACKAGE (1-2 Bedrooms)\n"
+                           "• 3kW Solar System\n"
+                           "• 8 x 375W Solar Panels\n"
+                           "• 3kW Inverter\n"
+                           "• Installation Included\n"
+                           "💰 Price: $3,500\n\n"
+                           "📦 MEDIUM HOME PACKAGE (3-4 Bedrooms)\n"
+                           "• 5kW Solar System\n"
+                           "• 14 x 375W Solar Panels\n"
+                           "• 5kW Inverter\n"
+                           "• Installation Included\n"
+                           "💰 Price: $5,500\n\n"
+                           "📦 LARGE HOME PACKAGE (5+ Bedrooms)\n"
+                           "• 8kW Solar System\n"
+                           "• 22 x 375W Solar Panels\n"
+                           "• 8kW Inverter\n"
+                           "• Installation Included\n"
+                           "💰 Price: $8,500\n\n"
+                           "📦 SMALL BUSINESS PACKAGE\n"
+                           "• 10kW Solar System\n"
+                           "• 27 x 375W Solar Panels\n"
+                           "• 10kW Inverter\n"
+                           "• Installation Included\n"
+                           "💰 Price: $10,500\n\n"
+                           "Would you like more information about any of these packages?"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "ask_interest",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "ask_interest",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "text",
+                    "text": {
+                        "body": "Which package interests you? (Reply: Small, Medium, Large, Business, or None)"
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "text",
+                    "context_variable": "package_interest"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "provide_details",
+                    "condition_config": {
+                        "type": "expression",
+                        "expression": "package_interest.lower() not in ['none', 'no', 'nothing']"
+                    },
+                    "priority": 1
+                },
+                {
+                    "to_step": "thank_you",
+                    "condition_config": {"type": "auto"},
+                    "priority": 2
+                }
+            ]
+        },
+        {
+            "name": "provide_details",
+            "type": "send_message",
+            "config": {
+                "message_type": "text",
+                "text": {
+                    "body": "Great choice! 🎉\n\n"
+                           "The {{package_interest}} package is excellent for your needs.\n\n"
+                           "All our packages include:\n"
+                           "✅ Professional Installation\n"
+                           "✅ 25-Year Panel Warranty\n"
+                           "✅ 5-Year Inverter Warranty\n"
+                           "✅ Free System Monitoring\n"
+                           "✅ Lifetime Technical Support\n\n"
+                           "Would you like to request a formal quote? (Reply: Yes or No)"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "route_to_quote",
+                    "condition_config": {
+                        "type": "auto"
+                    },
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "route_to_quote",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "text",
+                    "text": {
+                        "body": "Would you like to request a formal quote?"
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "text",
+                    "context_variable": "wants_quote"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "switch_to_quote",
+                    "condition_config": {
+                        "type": "expression",
+                        "expression": "wants_quote.lower() in ['yes', 'y', 'sure', 'ok']"
+                    },
+                    "priority": 1
+                },
+                {
+                    "to_step": "thank_you",
+                    "condition_config": {"type": "auto"},
+                    "priority": 2
+                }
+            ]
+        },
+        {
+            "name": "switch_to_quote",
+            "type": "switch_flow",
+            "config": {
+                "target_flow": "solar_quote_request",
+                "message": "Excellent! Let me get some details for your quote. 📋"
+            },
+            "transitions": []
+        },
+        {
+            "name": "thank_you",
+            "type": "send_message",
+            "config": {
+                "message_type": "text",
+                "text": {
+                    "body": "Thank you for your interest in Sungrip Solar! 🌞\n\n"
+                           "If you have any questions, feel free to contact us anytime.\n"
+                           "Type 'menu' to return to the main menu."
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "end",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "end",
+            "type": "end_flow",
+            "config": {}
+        }
+    ]
+}
+
+
+# Contact Support Flow
+CONTACT_SUPPORT_FLOW = {
+    "name": "contact_support",
+    "friendly_name": "Contact Support",
+    "description": "Connect customers with support team and collect their inquiry",
+    "is_active": True,
+    "trigger_keywords": ["support", "help", "contact", "talk to human", "agent"],
+    "steps": [
+        {
+            "name": "welcome",
+            "type": "send_message",
+            "is_entry_point": True,
+            "config": {
+                "message_type": "text",
+                "text": {
+                    "body": "👋 Sungrip Solar Support\n\n"
+                           "Our support team is here to help you!\n\n"
+                           "Please select what you need help with:\n"
+                           "1️⃣ Technical Issues\n"
+                           "2️⃣ Billing Questions\n"
+                           "3️⃣ Installation Support\n"
+                           "4️⃣ Product Information\n"
+                           "5️⃣ Other\n\n"
+                           "Reply with the number (1-5)."
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "ask_support_type",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "ask_support_type",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "text",
+                    "text": {
+                        "body": "Please enter your choice (1-5):"
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "text",
+                    "context_variable": "support_type"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "ask_details",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "ask_details",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "text",
+                    "text": {
+                        "body": "Please describe your issue or question in detail:"
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "text",
+                    "context_variable": "support_details"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "ask_contact",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "ask_contact",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "text",
+                    "text": {
+                        "body": "Please provide your preferred contact method:\n"
+                               "(Phone number or email address)"
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "text",
+                    "context_variable": "contact_method"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "confirmation",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "confirmation",
+            "type": "send_message",
+            "config": {
+                "message_type": "text",
+                "text": {
+                    "body": "Thank you for contacting Sungrip Solar Support! ✅\n\n"
+                           "We've received your request:\n"
+                           "📋 Type: {{support_type}}\n"
+                           "📝 Details: {{support_details}}\n"
+                           "📞 Contact: {{contact_method}}\n\n"
+                           "Our support team will get back to you within 24 hours.\n\n"
+                           "For urgent matters, please call us at:\n"
+                           "📱 +263 123 456 789\n\n"
+                           "Type 'menu' to return to the main menu."
                 }
             },
             "transitions": [

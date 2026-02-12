@@ -11,7 +11,13 @@ from django.core.management.base import BaseCommand, CommandError
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from flows.models import Flow, FlowStep, FlowTransition
-from flows.definitions.solar_flows import SOLAR_QUOTE_FLOW, INSTALLATION_SCHEDULING_FLOW
+from flows.definitions.solar_flows import (
+    MAIN_MENU_FLOW,
+    SOLAR_QUOTE_FLOW,
+    INSTALLATION_SCHEDULING_FLOW,
+    SOLAR_PACKAGES_FLOW,
+    CONTACT_SUPPORT_FLOW
+)
 
 
 class Command(BaseCommand):
@@ -22,9 +28,13 @@ class Command(BaseCommand):
         self.stdout.write("Starting to load flow definitions...")
         
         # List of flow definitions to load
+        # Main menu should be loaded first as it's the entry point
         flow_definitions = [
+            MAIN_MENU_FLOW,
             SOLAR_QUOTE_FLOW,
             INSTALLATION_SCHEDULING_FLOW,
+            SOLAR_PACKAGES_FLOW,
+            CONTACT_SUPPORT_FLOW,
         ]
 
         for flow_def in flow_definitions:
