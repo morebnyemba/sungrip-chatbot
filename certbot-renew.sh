@@ -50,5 +50,5 @@ while :; do
     fi
 
     # Sleep for 12 hours, but allow interruption by TERM signal
-    sleep 12h & wait $!
+    sleep 43200 & wait $!
 done
