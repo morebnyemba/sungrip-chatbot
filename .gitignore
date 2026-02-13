@@ -62,6 +62,10 @@ build/
 *.seed
 *.log
 
+# SSL / Certbot
+nginx_proxy/ssl/
+certbot/
+
 # Misc
 .cache/
 .pytest_cache/

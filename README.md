@@ -112,9 +112,9 @@ A comprehensive WhatsApp-based chatbot system for Sungrip Solar Energy Company, 
    ```
 
 6. **Access the application**
-   - Frontend: http://localhost
-   - Admin Panel: http://localhost/admin
-   - API: http://localhost/api
+   - Frontend: https://zimgrow.shop (or http://localhost for local dev)
+   - Admin Panel: https://api.zimgrow.shop/admin (or http://localhost/admin for local dev)
+   - API: https://api.zimgrow.shop/api (or http://localhost/api for local dev)
 
 ## 📚 Documentation
 
@@ -169,7 +169,7 @@ Conversational flow management (following reference repo conventions):
    - Get Phone Number ID, Access Token, and App Secret
 
 2. **Configure Webhook**
-   - Set webhook URL: `https://yourdomain.com/webhook/`
+   - Set webhook URL: `https://api.zimgrow.shop/webhook/`
    - Set verify token (match WHATSAPP_VERIFY_TOKEN in .env)
    - Subscribe to message events
 

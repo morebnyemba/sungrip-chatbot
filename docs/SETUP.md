@@ -120,9 +120,9 @@ docker compose down -v
 
 ### Access Services
 
-- **Frontend**: http://localhost
-- **Backend API**: http://localhost/api
-- **Django Admin**: http://localhost/admin
+- **Frontend**: https://zimgrow.shop (or http://localhost for local dev)
+- **Backend API**: https://api.zimgrow.shop/api (or http://localhost/api for local dev)
+- **Django Admin**: https://api.zimgrow.shop/admin (or http://localhost/admin for local dev)
 - **Database**: localhost:5432
 - **Redis**: localhost:6379
 
@@ -147,7 +147,7 @@ From the WhatsApp Business API dashboard, collect:
 ### 3. Configure Webhook
 
 1. In the WhatsApp dashboard, go to Configuration
-2. Set Webhook URL: `https://yourdomain.com/webhook/`
+2. Set Webhook URL: `https://api.zimgrow.shop/webhook/`
 3. Set Verify Token: Use the same value as `WHATSAPP_VERIFY_TOKEN` in your `.env`
 4. Subscribe to `messages` events
 
@@ -165,7 +165,7 @@ WHATSAPP_VERIFY_TOKEN=your_custom_verify_token
 
 ```bash
 # Verify webhook is working
-curl -X GET "https://yourdomain.com/webhook/?hub.mode=subscribe&hub.verify_token=your_verify_token&hub.challenge=test_challenge"
+curl -X GET "https://api.zimgrow.shop/webhook/?hub.mode=subscribe&hub.verify_token=your_verify_token&hub.challenge=test_challenge"
 
 # Should return: test_challenge
 ```
@@ -189,7 +189,7 @@ CELERY_BROKER_URL=redis://:your_redis_password@redis:6379/0
 # Django
 SECRET_KEY=<generate-secret-key>  # Use: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
 DEBUG=False  # Set to True only in development
-ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
+ALLOWED_HOSTS=api.zimgrow.shop,zimgrow.shop
 
 # WhatsApp
 WHATSAPP_PHONE_NUMBER_ID=<from-meta-dashboard>
@@ -210,7 +210,7 @@ EMAIL_HOST_USER=<your-email>
 EMAIL_HOST_PASSWORD=<your-app-password>
 
 # CORS
-CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+CORS_ALLOWED_ORIGINS=https://zimgrow.shop
 ```
 
 ## Dependency Management
@@ -314,37 +314,53 @@ nano .env  # Edit with production values
 
 ### 4. SSL Certificate Setup
 
-#### Option A: Let's Encrypt (Free)
+#### Option A: Let's Encrypt (Free, Recommended)
+
+Obtain SSL certificates for both `zimgrow.shop` (frontend) and `api.zimgrow.shop` (backend):
 
 ```bash
 # Install certbot
-sudo apt-get install certbot
+sudo apt-get update
+sudo apt-get install -y certbot
 
-# Generate certificate
-sudo certbot certonly --standalone -d yourdomain.com -d www.yourdomain.com
+# Create the certbot webroot directory
+mkdir -p certbot/www
 
-# Certificates will be in /etc/letsencrypt/live/yourdomain.com/
+# Stop nginx temporarily so certbot can bind to port 80
+docker compose stop nginx
+
+# Generate certificate for the frontend domain (zimgrow.shop)
+sudo certbot certonly --standalone \
+  -d zimgrow.shop \
+  --email your-email@example.com \
+  --agree-tos \
+  --no-eff-email
+
+# Generate certificate for the backend API domain (api.zimgrow.shop)
+sudo certbot certonly --standalone \
+  -d api.zimgrow.shop \
+  --email your-email@example.com \
+  --agree-tos \
+  --no-eff-email
+
+# Restart nginx after obtaining certificates
+docker compose up -d nginx
 ```
 
-Update `nginx_proxy/nginx.conf` to use SSL:
+Certificates will be saved to:
+- `/etc/letsencrypt/live/zimgrow.shop/fullchain.pem` &amp; `privkey.pem`
+- `/etc/letsencrypt/live/api.zimgrow.shop/fullchain.pem` &amp; `privkey.pem`
 
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name yourdomain.com www.yourdomain.com;
-    
-    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
-    
-    # ... rest of config
-}
+#### Auto-Renewal
 
-# Redirect HTTP to HTTPS
-server {
-    listen 80;
-    server_name yourdomain.com www.yourdomain.com;
-    return 301 https://$server_name$request_uri;
-}
+Set up a cron job to automatically renew certificates before they expire:
+
+```bash
+# Test renewal (dry run)
+sudo certbot renew --dry-run
+
+# Add cron job for automatic renewal (runs twice daily)
+echo "0 0,12 * * * root certbot renew --quiet --pre-hook 'docker compose -f /path/to/sungrip-chatbot/docker-compose.yml stop nginx' --post-hook 'docker compose -f /path/to/sungrip-chatbot/docker-compose.yml up -d nginx'" | sudo tee /etc/cron.d/certbot-renew
 ```
 
 #### Option B: Custom SSL Certificate
@@ -352,6 +368,8 @@ server {
 Place your SSL certificate files in `nginx_proxy/ssl/`:
 - `cert.pem` - SSL certificate
 - `key.pem` - Private key
+
+Then update `nginx_proxy/nginx.conf` to reference these files instead of the Let's Encrypt paths.
 
 ### 5. Deploy Application
 
@@ -455,7 +473,7 @@ docker compose restart db
 
 1. **Verify webhook URL is accessible**:
    ```bash
-   curl https://yourdomain.com/webhook/
+   curl https://api.zimgrow.shop/webhook/
    ```
 
 2. **Check webhook logs**:

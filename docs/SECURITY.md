@@ -100,7 +100,7 @@ This document outlines security best practices and considerations for deploying 
 
 1. **Configure Allowed Origins**
    ```env
-   CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+   CORS_ALLOWED_ORIGINS=https://zimgrow.shop
    ```
 
 2. **Never Use Wildcards in Production**
@@ -109,7 +109,7 @@ This document outlines security best practices and considerations for deploying 
    CORS_ALLOW_ALL_ORIGINS = True
    
    # RIGHT - Specify exact domains:
-   CORS_ALLOWED_ORIGINS = ['https://yourdomain.com']
+   CORS_ALLOWED_ORIGINS = ['https://zimgrow.shop']
    ```
 
 ## WhatsApp Security
@@ -176,47 +176,36 @@ This document outlines security best practices and considerations for deploying 
 # Install certbot
 sudo apt-get install certbot
 
-# Generate certificate
-sudo certbot certonly --standalone \
-  -d yourdomain.com \
-  -d www.yourdomain.com \
-  --email your-email@example.com
+# Stop nginx to free port 80
+docker compose stop nginx
 
-# Certificates saved to /etc/letsencrypt/live/yourdomain.com/
+# Generate certificate for frontend domain
+sudo certbot certonly --standalone \
+  -d zimgrow.shop \
+  --email your-email@example.com \
+  --agree-tos --no-eff-email
+
+# Generate certificate for backend API domain
+sudo certbot certonly --standalone \
+  -d api.zimgrow.shop \
+  --email your-email@example.com \
+  --agree-tos --no-eff-email
+
+# Restart nginx
+docker compose up -d nginx
+
+# Certificates saved to:
+# /etc/letsencrypt/live/zimgrow.shop/
+# /etc/letsencrypt/live/api.zimgrow.shop/
 ```
 
 ### Nginx SSL Configuration
 
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name yourdomain.com;
-    
-    # SSL certificates
-    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
-    
-    # SSL settings
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256...';
-    ssl_prefer_server_ciphers on;
-    
-    # HSTS
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-    
-    # Other security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-}
+The `nginx_proxy/nginx.conf` is already configured with separate server blocks:
+- `zimgrow.shop` — serves the React frontend
+- `api.zimgrow.shop` — serves the Django backend API, admin panel, and webhook
 
-# Redirect HTTP to HTTPS
-server {
-    listen 80;
-    server_name yourdomain.com;
-    return 301 https://$server_name$request_uri;
-}
-```
+See `nginx_proxy/nginx.conf` for the full configuration.
 
 ## Data Protection
 
