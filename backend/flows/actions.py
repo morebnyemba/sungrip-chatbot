@@ -209,3 +209,46 @@ def update_context_variable(contact, context: dict, params: dict) -> dict:
         logger.error(f"Error updating context variable: {e}", exc_info=True)
     
     return context
+
+
+@register_flow_action('check_whatsapp_flow')
+def check_whatsapp_flow(contact, context: dict, params: dict) -> dict:
+    """
+    Checks if a published WhatsApp interactive flow exists.
+    
+    Expected params:
+        - flow_name: Name of the WhatsApp flow to check
+        - save_to_variable: Variable name to save flow data (default: 'wa_flow_data')
+    
+    Sets the variable to flow data dict if found, or does not set it if not found.
+    The flow definition can then use 'variable_exists' condition to branch.
+    """
+    from flows.models import WhatsAppFlow
+
+    flow_name = params.get('flow_name')
+    save_to_var = params.get('save_to_variable', 'wa_flow_data')
+
+    if not flow_name:
+        logger.error("check_whatsapp_flow: 'flow_name' not provided in params")
+        return context
+
+    try:
+        wa_flow = WhatsAppFlow.objects.filter(
+            name=flow_name,
+            sync_status='published'
+        ).first()
+
+        if wa_flow and wa_flow.flow_id:
+            context[save_to_var] = {
+                'flow_id': wa_flow.flow_id,
+                'friendly_name': wa_flow.friendly_name,
+                'name': wa_flow.name,
+            }
+            logger.info(f"Found published WhatsApp flow '{flow_name}' with ID {wa_flow.flow_id}")
+        else:
+            logger.info(f"No published WhatsApp flow found for '{flow_name}'")
+
+    except Exception as e:
+        logger.error(f"Error checking WhatsApp flow '{flow_name}': {e}", exc_info=True)
+
+    return context

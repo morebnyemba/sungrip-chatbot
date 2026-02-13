@@ -258,8 +258,21 @@ class FlowProcessor:
                 self._action_send_email(parameters)
             elif action_type == "update_context":
                 self._action_update_context(parameters)
+            elif action_type == "check_whatsapp_flow":
+                self._action_check_whatsapp_flow(parameters)
+            elif action_type == "send_whatsapp_flow":
+                self._action_send_whatsapp_flow(step, parameters)
             else:
-                logger.warning(f"Unknown action type: {action_type}")
+                # Try the action registry for custom actions
+                from .actions import flow_action_registry
+                action_func = flow_action_registry.get(action_type)
+                if action_func:
+                    self.session.context_data = action_func(
+                        self.contact, self.session.context_data, parameters
+                    )
+                    self.session.save()
+                else:
+                    logger.warning(f"Unknown action type: {action_type}")
 
             # Move to next step
             self._transition_to_next_step()
@@ -734,6 +747,67 @@ class FlowProcessor:
         self.session.context_data.update(parameters)
         self.session.save()
         logger.info(f"Updated context with: {parameters}")
+
+    def _action_check_whatsapp_flow(self, parameters: Dict[str, Any]):
+        """
+        Check if a published WhatsApp interactive flow exists.
+        Sets a context variable with flow data if found.
+        """
+        from .actions import check_whatsapp_flow
+        self.session.context_data = check_whatsapp_flow(
+            self.contact, self.session.context_data, parameters
+        )
+        self.session.save()
+
+    def _action_send_whatsapp_flow(self, step: FlowStep, parameters: Dict[str, Any]):
+        """
+        Send a WhatsApp interactive flow message to the user.
+        Uses flow data from context to construct the interactive flow message.
+        """
+        from meta_integration.utils import send_whatsapp_message, send_typing_indicator
+
+        flow_data_var = parameters.get('flow_data_variable', 'wa_flow_data')
+        flow_data = self.session.context_data.get(flow_data_var, {})
+        flow_id = flow_data.get('flow_id')
+
+        if not flow_id:
+            logger.error(f"No flow_id in context variable '{flow_data_var}'")
+            return
+
+        phone_number = self.contact.phone_number
+        cta_text = parameters.get('cta_text', 'Start Form')
+        body_text = parameters.get('body_text', 'Please complete the form below.')
+        screen = parameters.get('initial_screen', 'WELCOME')
+
+        try:
+            send_typing_indicator(phone_number)
+        except Exception as e:
+            logger.warning(f"Failed to send typing indicator: {str(e)}")
+
+        message_config = {
+            "message_type": "interactive",
+            "interactive": {
+                "type": "flow",
+                "body": {"text": body_text},
+                "action": {
+                    "name": "flow",
+                    "parameters": {
+                        "flow_message_version": "3",
+                        "flow_token": f"{self.contact.id}-{flow_data.get('name', 'flow')}-{timezone.now().timestamp()}",
+                        "flow_id": flow_id,
+                        "flow_cta": cta_text,
+                        "flow_action": "navigate",
+                        "flow_action_payload": {"screen": screen}
+                    }
+                }
+            }
+        }
+
+        try:
+            result = send_whatsapp_message(phone_number, message_config)
+            logger.info(f"WhatsApp flow message sent in step {step.name}: {result}")
+        except Exception as e:
+            logger.error(f"Error sending WhatsApp flow message: {str(e)}")
 
     def _handle_error(self, error_message: str):
         """
