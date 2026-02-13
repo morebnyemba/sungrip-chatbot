@@ -348,8 +348,8 @@ docker compose up -d nginx
 ```
 
 Certificates will be saved to:
-- `/etc/letsencrypt/live/zimgrow.shop/fullchain.pem` &amp; `privkey.pem`
-- `/etc/letsencrypt/live/api.zimgrow.shop/fullchain.pem` &amp; `privkey.pem`
+- `/etc/letsencrypt/live/zimgrow.shop/fullchain.pem` & `privkey.pem`
+- `/etc/letsencrypt/live/api.zimgrow.shop/fullchain.pem` & `privkey.pem`
 
 #### Auto-Renewal
 
@@ -360,6 +360,7 @@ Set up a cron job to automatically renew certificates before they expire:
 sudo certbot renew --dry-run
 
 # Add cron job for automatic renewal (runs twice daily)
+# NOTE: Replace /path/to/sungrip-chatbot with your actual installation path
 echo "0 0,12 * * * root certbot renew --quiet --pre-hook 'docker compose -f /path/to/sungrip-chatbot/docker-compose.yml stop nginx' --post-hook 'docker compose -f /path/to/sungrip-chatbot/docker-compose.yml up -d nginx'" | sudo tee /etc/cron.d/certbot-renew
 ```
 
