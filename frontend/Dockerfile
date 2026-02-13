@@ -2,7 +2,8 @@
 FROM node:18-alpine AS build
 WORKDIR /app
 COPY package.json ./
-COPY package-lock.json* ./
+# If you use package-lock.json, copy it too. If yarn, use yarn.lock
+COPY package-lock.json ./
 RUN npm install
 COPY . .
 RUN npm run build
@@ -17,6 +18,7 @@ RUN rm /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
 # Copy our custom Nginx configuration
+# This assumes nginx.conf is in the same directory as this Dockerfile
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
