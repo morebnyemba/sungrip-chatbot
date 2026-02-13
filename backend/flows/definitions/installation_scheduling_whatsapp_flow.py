@@ -147,7 +147,9 @@ INSTALLATION_SCHEDULING_WHATSAPP_FLOW = {
                         "type": "DatePicker",
                         "name": "preferred_date",
                         "label": "Preferred Installation Date",
-                        "required": True
+                        "required": True,
+                        "min-date": "1753-01-01",
+                        "max-date": "2099-12-31"
                     },
                     {
                         "type": "RadioButtonsGroup",
