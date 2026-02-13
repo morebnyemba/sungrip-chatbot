@@ -10,6 +10,8 @@ from flows.whatsapp_flow_service import WhatsAppFlowService
 from meta_integration.models import MetaAppConfig
 from flows.definitions.solar_quote_whatsapp_flow import SOLAR_QUOTE_WHATSAPP_FLOW, SOLAR_QUOTE_WHATSAPP_FLOW_METADATA
 from flows.definitions.installation_scheduling_whatsapp_flow import INSTALLATION_SCHEDULING_WHATSAPP_FLOW, INSTALLATION_SCHEDULING_WHATSAPP_FLOW_METADATA
+from flows.definitions.contact_support_whatsapp_flow import CONTACT_SUPPORT_WHATSAPP_FLOW, CONTACT_SUPPORT_WHATSAPP_FLOW_METADATA
+from flows.definitions.solar_packages_whatsapp_flow import SOLAR_PACKAGES_WHATSAPP_FLOW, SOLAR_PACKAGES_WHATSAPP_FLOW_METADATA
 
 
 class Command(BaseCommand):
@@ -19,7 +21,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--flow',
             type=str,
-            choices=['solar_quote', 'installation_scheduling', 'all'],
+            choices=['solar_quote', 'installation_scheduling', 'contact_support', 'solar_packages', 'all'],
             default='all',
             help='Which flow to sync (default: all)'
         )
@@ -59,6 +61,16 @@ class Command(BaseCommand):
             flows_to_sync.append({
                 'json': INSTALLATION_SCHEDULING_WHATSAPP_FLOW,
                 'metadata': INSTALLATION_SCHEDULING_WHATSAPP_FLOW_METADATA
+            })
+        if flow_choice in ['contact_support', 'all']:
+            flows_to_sync.append({
+                'json': CONTACT_SUPPORT_WHATSAPP_FLOW,
+                'metadata': CONTACT_SUPPORT_WHATSAPP_FLOW_METADATA
+            })
+        if flow_choice in ['solar_packages', 'all']:
+            flows_to_sync.append({
+                'json': SOLAR_PACKAGES_WHATSAPP_FLOW,
+                'metadata': SOLAR_PACKAGES_WHATSAPP_FLOW_METADATA
             })
 
         if not flows_to_sync:
