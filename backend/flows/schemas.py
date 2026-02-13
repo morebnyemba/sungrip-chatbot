@@ -158,10 +158,17 @@ class ConditionConfig(BaseModel):
         'condition_false',
         'user_reply_matches',
         'context_variable_equals',
+        'always_true',
+        'variable_exists',
+        'whatsapp_flow_response_received',
+        'interactive_reply_id_equals',
+        'expression',
     ] = 'auto'
     condition: Optional[str] = None  # Expression like "monthly_bill > 100"
     variable: Optional[str] = None  # Variable name for context checks
+    variable_name: Optional[str] = None  # Variable name for existence checks
     value: Optional[Any] = None  # Expected value
+    expression: Optional[str] = None  # Python expression to evaluate
     pattern: Optional[str] = None  # Regex pattern for reply matching
     keywords: Optional[List[str]] = None  # Keywords for reply matching
     match_type: Literal['exact', 'contains'] = 'contains'
