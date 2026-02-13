@@ -159,10 +159,79 @@ SOLAR_QUOTE_FLOW = {
     "is_active": True,
     "trigger_keywords": ["quote", "price", "how much", "cost", "solar system"],
     "steps": [
+        # WhatsApp Flow integration entry point
         {
-            "name": "welcome",
-            "type": "send_message",
+            "name": "check_whatsapp_flow",
             "is_entry_point": True,
+            "type": "action",
+            "config": {
+                "action_type": "check_whatsapp_flow",
+                "parameters": {
+                    "flow_name": "solar_quote_whatsapp",
+                    "save_to_variable": "wa_flow_data"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "send_whatsapp_flow",
+                    "priority": 1,
+                    "condition_config": {
+                        "type": "variable_exists",
+                        "variable_name": "wa_flow_data"
+                    }
+                },
+                {
+                    "to_step": "fallback_welcome",
+                    "priority": 2,
+                    "condition_config": {"type": "always_true"}
+                }
+            ]
+        },
+        # WhatsApp Flow path
+        {
+            "name": "send_whatsapp_flow",
+            "type": "action",
+            "config": {
+                "action_type": "send_whatsapp_flow",
+                "parameters": {
+                    "flow_variable": "wa_flow_data"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "wait_for_whatsapp_response",
+                    "priority": 1,
+                    "condition_config": {"type": "always_true"}
+                }
+            ]
+        },
+        {
+            "name": "wait_for_whatsapp_response",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "text",
+                    "text": {
+                        "body": "Please complete the quote request form above. ☝️"
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "whatsapp_flow_response",
+                    "context_variable": "wa_quote_response"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "provide_quote",
+                    "priority": 1,
+                    "condition_config": {"type": "always_true"}
+                }
+            ]
+        },
+        # Legacy message-based flow path
+        {
+            "name": "fallback_welcome",
+            "type": "send_message",
             "config": {
                 "message_type": "text",
                 "text": {
@@ -242,6 +311,31 @@ SOLAR_QUOTE_FLOW = {
             },
             "transitions": [
                 {
+                    "to_step": "ask_location_pin",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        # Location picker step
+        {
+            "name": "ask_location_pin",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "text",
+                    "text": {
+                        "body": "Please send your location by using WhatsApp's location feature "
+                               "(📍 Location button). This helps our team find your site easily."
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "location",
+                    "context_variable": "location_pin"
+                }
+            },
+            "transitions": [
+                {
                     "to_step": "calculate_quote",
                     "condition_config": {"type": "auto"},
                     "priority": 1
@@ -254,15 +348,63 @@ SOLAR_QUOTE_FLOW = {
             "config": {
                 "action_type": "update_context",
                 "parameters": {
-                    "estimated_system_size": 5.0,  # This would be calculated based on monthly_bill
-                    "estimated_cost": 5000.0  # This would be calculated
+                    "estimated_system_size": 5.0,
+                    "estimated_cost": 5000.0
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "confirm_quote_request",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        # Confirmation step with interactive buttons
+        {
+            "name": "confirm_quote_request",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "interactive",
+                    "interactive": {
+                        "type": "button",
+                        "header": {"type": "text", "text": "Review Quote Request"},
+                        "body": {
+                            "text": "📋 *Solar Quote Request*\n\n"
+                                   "━━━━━━━━━━━━━━━━━━━━\n"
+                                   "💰 *Monthly Bill:*\n${{monthly_bill}}\n\n"
+                                   "🏠 *Roof Type:*\n{{roof_type}}\n\n"
+                                   "📍 *Location:*\n{{location}}\n"
+                                   "━━━━━━━━━━━━━━━━━━━━\n\n"
+                                   "Confirm to submit your quote request."
+                        },
+                        "action": {
+                            "buttons": [
+                                {"type": "reply", "reply": {"id": "confirm_quote", "title": "✅ Confirm"}},
+                                {"type": "reply", "reply": {"id": "cancel_quote", "title": "❌ Cancel"}}
+                            ]
+                        }
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "interactive_id",
+                    "context_variable": "quote_confirmation"
                 }
             },
             "transitions": [
                 {
                     "to_step": "provide_quote",
-                    "condition_config": {"type": "auto"},
-                    "priority": 1
+                    "priority": 1,
+                    "condition_config": {
+                        "type": "interactive_reply_id_equals",
+                        "value": "confirm_quote"
+                    }
+                },
+                {
+                    "to_step": "end_cancelled",
+                    "priority": 2,
+                    "condition_config": {"type": "always_true"}
                 }
             ]
         },
@@ -272,11 +414,31 @@ SOLAR_QUOTE_FLOW = {
             "config": {
                 "message_type": "text",
                 "text": {
-                    "body": "Based on your monthly bill of ${{monthly_bill}}, I recommend a solar system.\n\n"
+                    "body": "✅ Quote request submitted!\n\n"
+                           "Based on your monthly bill of ${{monthly_bill}}, I recommend a solar system.\n\n"
                            "📍 Location: {{location}}\n"
                            "🏠 Roof Type: {{roof_type}}\n\n"
                            "Our sales team will contact you shortly with a detailed quote. "
                            "Is there anything else you'd like to know?"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "end",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "end_cancelled",
+            "type": "send_message",
+            "config": {
+                "message_type": "text",
+                "text": {
+                    "body": "❌ Quote request cancelled.\n\n"
+                           "No worries! If you change your mind, just type 'quote' to start again.\n"
+                           "Type 'menu' to return to the main menu."
                 }
             },
             "transitions": [
@@ -303,10 +465,79 @@ INSTALLATION_SCHEDULING_FLOW = {
     "is_active": True,
     "trigger_keywords": ["schedule", "installation", "appointment", "install"],
     "steps": [
+        # WhatsApp Flow integration entry point
         {
-            "name": "welcome",
-            "type": "send_message",
+            "name": "check_whatsapp_flow",
             "is_entry_point": True,
+            "type": "action",
+            "config": {
+                "action_type": "check_whatsapp_flow",
+                "parameters": {
+                    "flow_name": "installation_scheduling_whatsapp",
+                    "save_to_variable": "wa_flow_data"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "send_whatsapp_flow",
+                    "priority": 1,
+                    "condition_config": {
+                        "type": "variable_exists",
+                        "variable_name": "wa_flow_data"
+                    }
+                },
+                {
+                    "to_step": "fallback_welcome",
+                    "priority": 2,
+                    "condition_config": {"type": "always_true"}
+                }
+            ]
+        },
+        # WhatsApp Flow path
+        {
+            "name": "send_whatsapp_flow",
+            "type": "action",
+            "config": {
+                "action_type": "send_whatsapp_flow",
+                "parameters": {
+                    "flow_variable": "wa_flow_data"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "wait_for_whatsapp_response",
+                    "priority": 1,
+                    "condition_config": {"type": "always_true"}
+                }
+            ]
+        },
+        {
+            "name": "wait_for_whatsapp_response",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "text",
+                    "text": {
+                        "body": "Please complete the scheduling form above. ☝️"
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "whatsapp_flow_response",
+                    "context_variable": "wa_scheduling_response"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "confirm_scheduling",
+                    "priority": 1,
+                    "condition_config": {"type": "always_true"}
+                }
+            ]
+        },
+        # Legacy message-based flow path
+        {
+            "name": "fallback_welcome",
+            "type": "send_message",
             "config": {
                 "message_type": "text",
                 "text": {
@@ -339,9 +570,137 @@ INSTALLATION_SCHEDULING_FLOW = {
             },
             "transitions": [
                 {
-                    "to_step": "confirm_scheduling",
+                    "to_step": "ask_time_preference",
                     "condition_config": {"type": "auto"},
                     "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "ask_time_preference",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "interactive",
+                    "interactive": {
+                        "type": "button",
+                        "body": {
+                            "text": "What time of day works best for the installation?"
+                        },
+                        "action": {
+                            "buttons": [
+                                {"type": "reply", "reply": {"id": "morning", "title": "🌅 Morning"}},
+                                {"type": "reply", "reply": {"id": "afternoon", "title": "🌇 Afternoon"}}
+                            ]
+                        }
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "interactive_id",
+                    "context_variable": "time_preference"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "ask_installation_address",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "ask_installation_address",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "text",
+                    "text": {
+                        "body": "Please provide your installation address:"
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "text",
+                    "context_variable": "installation_address"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "ask_location_pin",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        # Location picker step
+        {
+            "name": "ask_location_pin",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "text",
+                    "text": {
+                        "body": "Please send your location by using WhatsApp's location feature "
+                               "(📍 Location button). This helps our team find your site easily."
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "location",
+                    "context_variable": "location_pin"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "confirm_installation",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        # Confirmation step with interactive buttons
+        {
+            "name": "confirm_installation",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "interactive",
+                    "interactive": {
+                        "type": "button",
+                        "header": {"type": "text", "text": "Review Installation Request"},
+                        "body": {
+                            "text": "📋 *Installation Scheduling*\n\n"
+                                   "━━━━━━━━━━━━━━━━━━━━\n"
+                                   "📅 *Preferred Date:*\n{{preferred_date}}\n\n"
+                                   "🕐 *Time Preference:*\n{{time_preference}}\n\n"
+                                   "🏠 *Address:*\n{{installation_address}}\n"
+                                   "━━━━━━━━━━━━━━━━━━━━\n\n"
+                                   "Confirm to submit your installation request."
+                        },
+                        "action": {
+                            "buttons": [
+                                {"type": "reply", "reply": {"id": "confirm_install", "title": "✅ Confirm"}},
+                                {"type": "reply", "reply": {"id": "cancel_install", "title": "❌ Cancel"}}
+                            ]
+                        }
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "interactive_id",
+                    "context_variable": "install_confirmation"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "confirm_scheduling",
+                    "priority": 1,
+                    "condition_config": {
+                        "type": "interactive_reply_id_equals",
+                        "value": "confirm_install"
+                    }
+                },
+                {
+                    "to_step": "end_cancelled",
+                    "priority": 2,
+                    "condition_config": {"type": "always_true"}
                 }
             ]
         },
@@ -351,8 +710,30 @@ INSTALLATION_SCHEDULING_FLOW = {
             "config": {
                 "message_type": "text",
                 "text": {
-                    "body": "Thank you! I've noted your preference for {{preferred_date}}. "
-                           "Our installation team will contact you within 24 hours to confirm the exact time."
+                    "body": "✅ Installation request submitted!\n\n"
+                           "Thank you! I've noted your preference for {{preferred_date}} ({{time_preference}}).\n"
+                           "📍 Address: {{installation_address}}\n\n"
+                           "Our installation team will contact you within 24 hours to confirm the exact time.\n\n"
+                           "Type 'menu' to return to the main menu."
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "end",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "end_cancelled",
+            "type": "send_message",
+            "config": {
+                "message_type": "text",
+                "text": {
+                    "body": "❌ Installation request cancelled.\n\n"
+                           "No worries! If you change your mind, just type 'schedule' to start again.\n"
+                           "Type 'menu' to return to the main menu."
                 }
             },
             "transitions": [
@@ -651,9 +1032,57 @@ CONTACT_SUPPORT_FLOW = {
             },
             "transitions": [
                 {
-                    "to_step": "confirmation",
+                    "to_step": "confirm_support_request",
                     "condition_config": {"type": "auto"},
                     "priority": 1
+                }
+            ]
+        },
+        # Confirmation step with interactive buttons
+        {
+            "name": "confirm_support_request",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "interactive",
+                    "interactive": {
+                        "type": "button",
+                        "header": {"type": "text", "text": "Review Support Request"},
+                        "body": {
+                            "text": "📋 *Support Request Summary*\n\n"
+                                   "━━━━━━━━━━━━━━━━━━━━\n"
+                                   "📋 *Type:*\n{{support_type}}\n\n"
+                                   "📝 *Details:*\n{{support_details}}\n\n"
+                                   "📞 *Contact:*\n{{contact_method}}\n"
+                                   "━━━━━━━━━━━━━━━━━━━━\n\n"
+                                   "Confirm to submit your support request."
+                        },
+                        "action": {
+                            "buttons": [
+                                {"type": "reply", "reply": {"id": "confirm_support", "title": "✅ Confirm"}},
+                                {"type": "reply", "reply": {"id": "cancel_support", "title": "❌ Cancel"}}
+                            ]
+                        }
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "interactive_id",
+                    "context_variable": "support_confirmation"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "confirmation",
+                    "priority": 1,
+                    "condition_config": {
+                        "type": "interactive_reply_id_equals",
+                        "value": "confirm_support"
+                    }
+                },
+                {
+                    "to_step": "end_cancelled",
+                    "priority": 2,
+                    "condition_config": {"type": "always_true"}
                 }
             ]
         },
@@ -671,6 +1100,25 @@ CONTACT_SUPPORT_FLOW = {
                            "Our support team will get back to you within 24 hours.\n\n"
                            "For urgent matters, please call us at:\n"
                            "📱 +263 123 456 789\n\n"
+                           "Type 'menu' to return to the main menu."
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "end",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "end_cancelled",
+            "type": "send_message",
+            "config": {
+                "message_type": "text",
+                "text": {
+                    "body": "❌ Support request cancelled.\n\n"
+                           "No worries! If you need help, just type 'support' to start again.\n"
                            "Type 'menu' to return to the main menu."
                 }
             },
