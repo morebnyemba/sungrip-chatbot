@@ -160,7 +160,7 @@ class FlowProcessor:
                 # Don't fail the whole message if typing indicator fails
                 logger.warning(f"Failed to send typing indicator: {str(e)}")
 
-            # Send message
+            # Send message (interactive messages pass config directly like other types)
             result = send_whatsapp_message(phone_number, message_config)
             logger.info(f"Message sent in step {step.name}: {result}")
 
@@ -462,6 +462,8 @@ class FlowProcessor:
 
         if condition_type == "auto":
             return True
+        elif condition_type == "always_true":
+            return True
         elif condition_type == "condition_true" and condition_result is True:
             return True
         elif condition_type == "condition_false" and condition_result is False:
@@ -475,6 +477,20 @@ class FlowProcessor:
             expected_value = condition_config.get("value")
             actual_value = self.session.context_data.get(var_name)
             return actual_value == expected_value
+        elif condition_type == "variable_exists":
+            var_name = condition_config.get("variable_name")
+            return var_name is not None and var_name in self.session.context_data
+        elif condition_type == "whatsapp_flow_response_received":
+            return self.session.context_data.get("whatsapp_flow_response_received") is True
+        elif condition_type == "interactive_reply_id_equals":
+            expected_value = condition_config.get("value")
+            last_reply = self.session.context_data.get("_last_user_reply", "")
+            return last_reply == expected_value
+        elif condition_type == "expression":
+            expr = condition_config.get("expression")
+            if expr:
+                return self._evaluate_condition(expr)
+            return False
         else:
             return False
     
@@ -595,6 +611,12 @@ class FlowProcessor:
             import re
             if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', reply_text):
                 raise ValueError("Please enter a valid email address")
+            return reply_text
+        elif expected_type == "location":
+            # Store location data as-is
+            return reply_text
+        elif expected_type == "interactive_id":
+            # Store interactive button reply ID
             return reply_text
         else:
             # Text type or other
