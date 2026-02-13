@@ -120,6 +120,8 @@ services:
       - static_volume:/srv/www/static:ro
       - media_volume:/srv/www/media:ro
       - ./nginx_proxy/ssl:/etc/nginx/ssl:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
     depends_on:
       - backend
       - frontend
