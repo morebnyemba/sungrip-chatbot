@@ -16,47 +16,96 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 class SendMessageConfig(BaseModel):
-    """Configuration for send_message step."""
+    """Configuration for send_message step.
+    
+    Supports both simple format and WhatsApp native format:
+    - Simple: {"message": "Hello!"}
+    - WhatsApp: {"message_type": "text", "text": {"body": "Hello!"}}
+    """
 
     model_config = ConfigDict(extra='allow')  # Allow extra fields for variables
 
-    message: str  # Message text (supports {{variables}})
+    # Simple format
+    message: Optional[str] = None  # Message text (supports {{variables}})
     media_url: Optional[str] = None
     quick_replies: Optional[List[str]] = None
+    
+    # WhatsApp native format
+    message_type: Optional[str] = None
+    text: Optional[Dict[str, Any]] = None
+    interactive: Optional[Dict[str, Any]] = None
+    image: Optional[Dict[str, Any]] = None
+    document: Optional[Dict[str, Any]] = None
+    video: Optional[Dict[str, Any]] = None
 
     @field_validator('message')
     @classmethod
     def message_not_empty(cls, v):
-        if not v or not v.strip():
+        if v is not None and (not v or not v.strip()):
             raise ValueError("message cannot be empty")
-        return v.strip()
+        return v.strip() if v else v
+    
+    def model_post_init(self, __context):
+        """Validate that at least one format is provided."""
+        has_simple = self.message is not None
+        has_whatsapp = self.message_type is not None and (
+            self.text is not None or 
+            self.interactive is not None or 
+            self.image is not None or 
+            self.document is not None or 
+            self.video is not None
+        )
+        
+        if not has_simple and not has_whatsapp:
+            raise ValueError("Either 'message' or WhatsApp format (message_type + content) is required")
 
 
 class QuestionConfig(BaseModel):
-    """Configuration for question step."""
+    """Configuration for question step.
+    
+    Supports both simple format and WhatsApp native format:
+    - Simple: {"question_text": "What is your name?", "input_type": "text"}
+    - WhatsApp: {"message_config": {"message_type": "text", "text": {"body": "..."}}, "reply_config": {...}}
+    """
 
     model_config = ConfigDict(extra='allow')
 
-    question_text: str
+    # Simple format
+    question_text: Optional[str] = None
     input_type: Literal['text', 'options', 'phone', 'email'] = 'text'
     options: Optional[List[str]] = None
     required: bool = True
     validation_pattern: Optional[str] = None  # Regex pattern for validation
+    
+    # WhatsApp native format
+    message_config: Optional[Dict[str, Any]] = None
+    reply_config: Optional[Dict[str, Any]] = None
 
     @field_validator('question_text')
     @classmethod
     def question_not_empty(cls, v):
-        if not v or not v.strip():
+        if v is not None and (not v or not v.strip()):
             raise ValueError("question_text cannot be empty")
-        return v.strip()
+        return v.strip() if v else v
 
     @field_validator('options')
     @classmethod
     def validate_options(cls, v, info):
         input_type = info.data.get('input_type')
         if input_type == 'options' and not v:
-            raise ValueError("options required when input_type is 'options'")
+            # Only enforce if using simple format
+            question_text = info.data.get('question_text')
+            if question_text is not None:
+                raise ValueError("options required when input_type is 'options'")
         return v
+    
+    def model_post_init(self, __context):
+        """Validate that at least one format is provided."""
+        has_simple = self.question_text is not None
+        has_whatsapp = self.message_config is not None
+        
+        if not has_simple and not has_whatsapp:
+            raise ValueError("Either 'question_text' or 'message_config' is required")
 
 
 class WaitForReplyConfig(BaseModel):
@@ -99,6 +148,32 @@ class WebhookCallConfig(BaseModel):
     timeout_seconds: int = 30
 
 
+class ActionConfig(BaseModel):
+    """Configuration for action step."""
+
+    model_config = ConfigDict(extra='allow')
+
+    action_type: str
+    parameters: Optional[Dict[str, Any]] = None
+
+
+class SwitchFlowConfig(BaseModel):
+    """Configuration for switch_flow step."""
+
+    model_config = ConfigDict(extra='allow')
+
+    target_flow: str  # Flow name to switch to
+    message: Optional[str] = None  # Optional message before switching
+
+
+class EndFlowConfig(BaseModel):
+    """Configuration for end_flow step."""
+
+    model_config = ConfigDict(extra='allow')
+
+    # end_flow typically has no required config, but allow extra fields
+
+
 class StepConfigUnion(BaseModel):
     """Union of all step configs - validates based on step_type."""
 
@@ -111,6 +186,9 @@ class StepConfigUnion(BaseModel):
         'trigger_flow',
         'whatsapp_template',
         'webhook_call',
+        'action',
+        'switch_flow',
+        'end_flow',
     ]
     config: Dict[str, Any]
 
@@ -136,6 +214,12 @@ class StepConfigUnion(BaseModel):
                 WhatsAppTemplateConfig(**v)
             elif step_type == 'webhook_call':
                 WebhookCallConfig(**v)
+            elif step_type == 'action':
+                ActionConfig(**v)
+            elif step_type == 'switch_flow':
+                SwitchFlowConfig(**v)
+            elif step_type == 'end_flow':
+                EndFlowConfig(**v)
         except Exception as e:
             logger.error(f"Config validation failed for {step_type}: {str(e)}")
             raise ValueError(f"Invalid config for step_type '{step_type}': {str(e)}")
