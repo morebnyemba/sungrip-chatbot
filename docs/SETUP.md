@@ -316,15 +316,15 @@ nano .env  # Edit with production values
 
 #### Option A: Let's Encrypt (Free, Recommended)
 
-Obtain SSL certificates for both `zimgrow.shop` (frontend) and `api.zimgrow.shop` (backend):
+Obtain SSL certificates for both `zimgrow.shop` (frontend) and `api.zimgrow.shop` (backend).
+The `docker-compose.yml` bind-mounts the host's `/etc/letsencrypt` directory into the nginx
+container (read-only) and certbot container, so certificates obtained on the host are
+automatically available inside the containers.
 
 ```bash
-# Install certbot
+# Install certbot on the host
 sudo apt-get update
 sudo apt-get install -y certbot
-
-# Create the certbot webroot directory
-mkdir -p certbot/www
 
 # Stop nginx temporarily so certbot can bind to port 80
 docker compose stop nginx
@@ -343,7 +343,7 @@ sudo certbot certonly --standalone \
   --agree-tos \
   --no-eff-email
 
-# Restart nginx after obtaining certificates
+# Start nginx (it will now find the certificates via the bind mount)
 docker compose up -d nginx
 ```
 
@@ -353,7 +353,9 @@ Certificates will be saved to:
 
 #### Auto-Renewal
 
-Set up a cron job to automatically renew certificates before they expire:
+The `certbot` container in `docker-compose.yml` handles automatic renewal via the
+`certbot-renew.sh` script, which checks every 12 hours. Alternatively, you can set up
+a host-level cron job:
 
 ```bash
 # Test renewal (dry run)
