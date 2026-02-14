@@ -51,7 +51,7 @@ MAIN_MENU_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "text",
-                    "context_variable": "menu_choice"
+                    "save_to_variable": "menu_choice"
                 }
             },
             "transitions": [
@@ -98,7 +98,7 @@ MAIN_MENU_FLOW = {
             "name": "route_to_quote",
             "type": "switch_flow",
             "config": {
-                "target_flow": "solar_quote_request",
+                "target_flow_name": "solar_quote_request",
                 "message": "Great! Let me help you get a quote. 📋"
             },
             "transitions": []
@@ -107,7 +107,7 @@ MAIN_MENU_FLOW = {
             "name": "route_to_installation",
             "type": "switch_flow",
             "config": {
-                "target_flow": "installation_scheduling",
+                "target_flow_name": "installation_scheduling",
                 "message": "Perfect! Let's schedule your installation. 📅"
             },
             "transitions": []
@@ -116,7 +116,7 @@ MAIN_MENU_FLOW = {
             "name": "route_to_packages",
             "type": "switch_flow",
             "config": {
-                "target_flow": "solar_packages",
+                "target_flow_name": "solar_packages",
                 "message": "Let me show you our available solar packages. 📦"
             },
             "transitions": []
@@ -125,7 +125,7 @@ MAIN_MENU_FLOW = {
             "name": "route_to_support",
             "type": "switch_flow",
             "config": {
-                "target_flow": "contact_support",
+                "target_flow_name": "contact_support",
                 "message": "I'll connect you with our support team. 👥"
             },
             "transitions": []
@@ -165,11 +165,13 @@ SOLAR_QUOTE_FLOW = {
             "is_entry_point": True,
             "type": "action",
             "config": {
-                "action_type": "check_whatsapp_flow",
+                "actions_to_run": [{
+                    "action_type": "check_whatsapp_flow",
                 "parameters": {
                     "flow_name": "solar_quote_whatsapp",
                     "save_to_variable": "wa_flow_data"
                 }
+                }]
             },
             "transitions": [
                 {
@@ -192,10 +194,12 @@ SOLAR_QUOTE_FLOW = {
             "name": "send_whatsapp_flow",
             "type": "action",
             "config": {
-                "action_type": "send_whatsapp_flow",
+                "actions_to_run": [{
+                    "action_type": "send_whatsapp_flow",
                 "parameters": {
                     "flow_variable": "wa_flow_data"
                 }
+                }]
             },
             "transitions": [
                 {
@@ -207,24 +211,16 @@ SOLAR_QUOTE_FLOW = {
         },
         {
             "name": "wait_for_whatsapp_response",
-            "type": "question",
+            "type": "action",
             "config": {
-                "message_config": {
-                    "message_type": "text",
-                    "text": {
-                        "body": "Please complete the quote request form above. ☝️"
-                    }
-                },
-                "reply_config": {
-                    "expected_type": "whatsapp_flow_response",
-                    "context_variable": "wa_quote_response"
-                }
+                "actions_to_run": [],
+                "wait_for": "whatsapp_flow_response"
             },
             "transitions": [
                 {
                     "to_step": "provide_quote",
                     "priority": 1,
-                    "condition_config": {"type": "always_true"}
+                    "condition_config": {"type": "whatsapp_flow_response_received"}
                 }
             ]
         },
@@ -260,7 +256,7 @@ SOLAR_QUOTE_FLOW = {
                 "reply_config": {
                     "expected_type": "number",
                     "validation": {"min": 0, "max": 100000},
-                    "context_variable": "monthly_bill"
+                    "save_to_variable": "monthly_bill"
                 }
             },
             "transitions": [
@@ -283,7 +279,7 @@ SOLAR_QUOTE_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "text",
-                    "context_variable": "roof_type"
+                    "save_to_variable": "roof_type"
                 }
             },
             "transitions": [
@@ -306,7 +302,7 @@ SOLAR_QUOTE_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "text",
-                    "context_variable": "location"
+                    "save_to_variable": "location"
                 }
             },
             "transitions": [
@@ -331,7 +327,7 @@ SOLAR_QUOTE_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "location",
-                    "context_variable": "location_pin"
+                    "save_to_variable": "location_pin"
                 }
             },
             "transitions": [
@@ -346,11 +342,13 @@ SOLAR_QUOTE_FLOW = {
             "name": "calculate_quote",
             "type": "action",
             "config": {
-                "action_type": "update_context",
+                "actions_to_run": [{
+                    "action_type": "update_context",
                 "parameters": {
                     "estimated_system_size": 5.0,
                     "estimated_cost": 5000.0
                 }
+                }]
             },
             "transitions": [
                 {
@@ -389,7 +387,7 @@ SOLAR_QUOTE_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "interactive_id",
-                    "context_variable": "quote_confirmation"
+                    "save_to_variable": "quote_confirmation"
                 }
             },
             "transitions": [
@@ -471,11 +469,13 @@ INSTALLATION_SCHEDULING_FLOW = {
             "is_entry_point": True,
             "type": "action",
             "config": {
-                "action_type": "check_whatsapp_flow",
+                "actions_to_run": [{
+                    "action_type": "check_whatsapp_flow",
                 "parameters": {
                     "flow_name": "installation_scheduling_whatsapp",
                     "save_to_variable": "wa_flow_data"
                 }
+                }]
             },
             "transitions": [
                 {
@@ -498,10 +498,12 @@ INSTALLATION_SCHEDULING_FLOW = {
             "name": "send_whatsapp_flow",
             "type": "action",
             "config": {
-                "action_type": "send_whatsapp_flow",
+                "actions_to_run": [{
+                    "action_type": "send_whatsapp_flow",
                 "parameters": {
                     "flow_variable": "wa_flow_data"
                 }
+                }]
             },
             "transitions": [
                 {
@@ -513,24 +515,16 @@ INSTALLATION_SCHEDULING_FLOW = {
         },
         {
             "name": "wait_for_whatsapp_response",
-            "type": "question",
+            "type": "action",
             "config": {
-                "message_config": {
-                    "message_type": "text",
-                    "text": {
-                        "body": "Please complete the scheduling form above. ☝️"
-                    }
-                },
-                "reply_config": {
-                    "expected_type": "whatsapp_flow_response",
-                    "context_variable": "wa_scheduling_response"
-                }
+                "actions_to_run": [],
+                "wait_for": "whatsapp_flow_response"
             },
             "transitions": [
                 {
                     "to_step": "confirm_scheduling",
                     "priority": 1,
-                    "condition_config": {"type": "always_true"}
+                    "condition_config": {"type": "whatsapp_flow_response_received"}
                 }
             ]
         },
@@ -565,7 +559,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "text",
-                    "context_variable": "preferred_date"
+                    "save_to_variable": "preferred_date"
                 }
             },
             "transitions": [
@@ -597,7 +591,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "interactive_id",
-                    "context_variable": "time_preference"
+                    "save_to_variable": "time_preference"
                 }
             },
             "transitions": [
@@ -620,7 +614,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "text",
-                    "context_variable": "installation_address"
+                    "save_to_variable": "installation_address"
                 }
             },
             "transitions": [
@@ -645,7 +639,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "location",
-                    "context_variable": "location_pin"
+                    "save_to_variable": "location_pin"
                 }
             },
             "transitions": [
@@ -685,7 +679,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "interactive_id",
-                    "context_variable": "install_confirmation"
+                    "save_to_variable": "install_confirmation"
                 }
             },
             "transitions": [
@@ -820,7 +814,7 @@ SOLAR_PACKAGES_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "text",
-                    "context_variable": "package_interest"
+                    "save_to_variable": "package_interest"
                 }
             },
             "transitions": [
@@ -878,7 +872,7 @@ SOLAR_PACKAGES_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "text",
-                    "context_variable": "wants_quote"
+                    "save_to_variable": "wants_quote"
                 }
             },
             "transitions": [
@@ -901,7 +895,7 @@ SOLAR_PACKAGES_FLOW = {
             "name": "switch_to_quote",
             "type": "switch_flow",
             "config": {
-                "target_flow": "solar_quote_request",
+                "target_flow_name": "solar_quote_request",
                 "message": "Excellent! Let me get some details for your quote. 📋"
             },
             "transitions": []
@@ -980,7 +974,7 @@ CONTACT_SUPPORT_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "text",
-                    "context_variable": "support_type"
+                    "save_to_variable": "support_type"
                 }
             },
             "transitions": [
@@ -1003,7 +997,7 @@ CONTACT_SUPPORT_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "text",
-                    "context_variable": "support_details"
+                    "save_to_variable": "support_details"
                 }
             },
             "transitions": [
@@ -1027,7 +1021,7 @@ CONTACT_SUPPORT_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "text",
-                    "context_variable": "contact_method"
+                    "save_to_variable": "contact_method"
                 }
             },
             "transitions": [
@@ -1067,7 +1061,7 @@ CONTACT_SUPPORT_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "interactive_id",
-                    "context_variable": "support_confirmation"
+                    "save_to_variable": "support_confirmation"
                 }
             },
             "transitions": [
