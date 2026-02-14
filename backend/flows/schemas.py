@@ -107,7 +107,7 @@ class StepConfigQuestion(BaseModel):
 
 class ActionItem(BaseModel):
     """Individual action item."""
-    model_config = ConfigDict(extra='allow')
+    model_config = ConfigDict(extra='allow', protected_namespaces=())
     
     action_type: str
     # Common fields
