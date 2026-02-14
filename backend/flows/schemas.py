@@ -5,7 +5,7 @@ Provides runtime validation for flow configurations and context data.
 """
 
 from typing import Optional, Dict, Any, List, Literal
-from pydantic import BaseModel, field_validator, ConfigDict
+from pydantic import BaseModel, field_validator, ConfigDict, model_validator
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,16 +20,32 @@ class SendMessageConfig(BaseModel):
 
     model_config = ConfigDict(extra='allow')  # Allow extra fields for variables
 
-    message: str  # Message text (supports {{variables}})
+    # Legacy plain-text message
+    message: Optional[str] = None  # Message text (supports {{variables}})
+    # Structured WhatsApp payloads
+    message_type: Optional[str] = None  # e.g., text, interactive
+    text: Optional[Dict[str, Any]] = None
+    interactive: Optional[Dict[str, Any]] = None
     media_url: Optional[str] = None
     quick_replies: Optional[List[str]] = None
 
     @field_validator('message')
     @classmethod
     def message_not_empty(cls, v):
-        if not v or not v.strip():
+        if v is None:
+            return v
+        if not v.strip():
             raise ValueError("message cannot be empty")
         return v.strip()
+
+    @model_validator(mode='after')
+    def ensure_content_present(self):
+        """
+        Accept either legacy 'message' or structured WhatsApp payloads.
+        """
+        if not any([self.message, self.text, self.interactive]):
+            raise ValueError("SendMessageConfig requires 'message', 'text', or 'interactive' content")
+        return self
 
 
 class QuestionConfig(BaseModel):
@@ -37,16 +53,20 @@ class QuestionConfig(BaseModel):
 
     model_config = ConfigDict(extra='allow')
 
-    question_text: str
+    question_text: Optional[str] = None
     input_type: Literal['text', 'options', 'phone', 'email'] = 'text'
     options: Optional[List[str]] = None
     required: bool = True
     validation_pattern: Optional[str] = None  # Regex pattern for validation
+    message_config: Optional[Dict[str, Any]] = None
+    reply_config: Optional[Dict[str, Any]] = None
 
     @field_validator('question_text')
     @classmethod
     def question_not_empty(cls, v):
-        if not v or not v.strip():
+        if v is None:
+            return v
+        if not v.strip():
             raise ValueError("question_text cannot be empty")
         return v.strip()
 
@@ -57,6 +77,15 @@ class QuestionConfig(BaseModel):
         if input_type == 'options' and not v:
             raise ValueError("options required when input_type is 'options'")
         return v
+
+    @model_validator(mode='after')
+    def ensure_prompt_present(self):
+        """
+        Accept either legacy question_text or structured message_config.
+        """
+        if not self.question_text and not self.message_config:
+            raise ValueError("QuestionConfig requires 'question_text' or 'message_config'")
+        return self
 
 
 class WaitForReplyConfig(BaseModel):
@@ -99,6 +128,52 @@ class WebhookCallConfig(BaseModel):
     timeout_seconds: int = 30
 
 
+class ActionConfig(BaseModel):
+    """Configuration for action step."""
+
+    model_config = ConfigDict(extra='allow')
+
+    action_type: str
+
+
+class SwitchFlowConfig(BaseModel):
+    """Configuration for switch_flow step."""
+
+    model_config = ConfigDict(extra='allow')
+
+    target_flow: str
+    message: Optional[str] = None
+
+
+class ConditionStepConfig(BaseModel):
+    """Configuration for condition step."""
+
+    model_config = ConfigDict(extra='allow')
+
+    condition: Optional[str] = None
+
+
+class EndFlowConfig(BaseModel):
+    """Configuration for end_flow step."""
+
+    model_config = ConfigDict(extra='allow')
+
+
+class HumanHandoverConfig(BaseModel):
+    """Configuration for human_handover step."""
+
+    model_config = ConfigDict(extra='allow')
+
+    message: Optional[str] = None
+    team: Optional[str] = None
+
+
+class StartFlowNodeConfig(BaseModel):
+    """Configuration for start_flow_node step."""
+
+    model_config = ConfigDict(extra='allow')
+
+
 class StepConfigUnion(BaseModel):
     """Union of all step configs - validates based on step_type."""
 
@@ -111,6 +186,12 @@ class StepConfigUnion(BaseModel):
         'trigger_flow',
         'whatsapp_template',
         'webhook_call',
+        'condition',
+        'action',
+        'end_flow',
+        'start_flow_node',
+        'human_handover',
+        'switch_flow',
     ]
     config: Dict[str, Any]
 
@@ -136,6 +217,18 @@ class StepConfigUnion(BaseModel):
                 WhatsAppTemplateConfig(**v)
             elif step_type == 'webhook_call':
                 WebhookCallConfig(**v)
+            elif step_type == 'condition':
+                ConditionStepConfig(**v)
+            elif step_type == 'action':
+                ActionConfig(**v)
+            elif step_type == 'switch_flow':
+                SwitchFlowConfig(**v)
+            elif step_type == 'end_flow':
+                EndFlowConfig(**v)
+            elif step_type == 'human_handover':
+                HumanHandoverConfig(**v)
+            elif step_type == 'start_flow_node':
+                StartFlowNodeConfig(**v)
         except Exception as e:
             logger.error(f"Config validation failed for {step_type}: {str(e)}")
             raise ValueError(f"Invalid config for step_type '{step_type}': {str(e)}")
@@ -209,7 +302,22 @@ class TransitionConfigSchema(BaseModel):
 
     model_config = ConfigDict(extra='allow')
 
-    type: Literal['sequential', 'conditional', 'loop', 'end'] = 'sequential'
+    type: Literal[
+        'auto',
+        'condition_true',
+        'condition_false',
+        'user_reply_matches',
+        'context_variable_equals',
+        'always_true',
+        'variable_exists',
+        'whatsapp_flow_response_received',
+        'interactive_reply_id_equals',
+        'expression',
+        'sequential',
+        'conditional',
+        'loop',
+        'end',
+    ] = 'auto'
     target_step_id: Optional[int] = None
     condition_config: Optional[ConditionConfig] = None
 
@@ -291,6 +399,16 @@ def validate_transition_config(
     Raises:
         ValueError: If validation fails
     """
+    if not isinstance(transition_config, dict):
+        raise ValueError("Transition config must be a dictionary")
+
+    # Most transitions use the condition config directly
+    try:
+        return ConditionConfig(**transition_config).model_dump(exclude_unset=True)
+    except Exception:
+        pass
+
+    # Fallback for legacy/extended structures
     try:
         schema = TransitionConfigSchema(**transition_config)
         return schema.model_dump(exclude_unset=True)
