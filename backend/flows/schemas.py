@@ -360,11 +360,36 @@ def validate_step_config(step_type: str, config: Dict[str, Any]) -> Dict[str, An
     return schema.config
 
 
+def validate_condition_config(condition_config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Validate condition configuration (for transitions).
+
+    Args:
+        condition_config: Condition configuration dictionary
+
+    Returns:
+        Validated configuration
+
+    Raises:
+        ValueError: If validation fails
+    """
+    try:
+        schema = ConditionConfig(**condition_config)
+        return schema.model_dump(exclude_unset=True)
+    except Exception as e:
+        logger.error(f"Condition config validation failed: {str(e)}")
+        raise ValueError(f"Invalid condition config: {str(e)}")
+
+
 def validate_transition_config(
     transition_config: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
     Validate transition configuration.
+
+    This can validate either:
+    1. A full transition config with type, target_step_id, and condition_config
+    2. A condition config only (for backward compatibility)
 
     Args:
         transition_config: Transition configuration dictionary
@@ -375,6 +400,16 @@ def validate_transition_config(
     Raises:
         ValueError: If validation fails
     """
+    # Check if this is a condition config (has 'type' but not 'target_step_id')
+    # or a full transition config
+    has_condition_type = 'type' in transition_config
+    has_target_step = 'target_step_id' in transition_config
+    
+    if has_condition_type and not has_target_step:
+        # This is a condition config, not a full transition config
+        return validate_condition_config(transition_config)
+    
+    # This is a full transition config
     try:
         schema = TransitionConfigSchema(**transition_config)
         return schema.model_dump(exclude_unset=True)
