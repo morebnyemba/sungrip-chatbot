@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.zimgrow.shop';
+const AUTH_ERROR_EVENT = 'auth-error';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -17,6 +18,8 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+let refreshPromise = null;
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -25,9 +28,12 @@ apiClient.interceptors.response.use(
       const refreshToken = localStorage.getItem('refreshToken');
       if (refreshToken) {
         try {
-          const { data } = await axios.post(`${API_BASE_URL}/api/auth/token/refresh/`, {
-            refresh: refreshToken,
-          });
+          if (!refreshPromise) {
+            refreshPromise = axios.post(`${API_BASE_URL}/api/auth/token/refresh/`, {
+              refresh: refreshToken,
+            }).finally(() => { refreshPromise = null; });
+          }
+          const { data } = await refreshPromise;
           localStorage.setItem('accessToken', data.access);
           error.config.headers.Authorization = `Bearer ${data.access}`;
           return apiClient(error.config);
@@ -35,11 +41,11 @@ apiClient.interceptors.response.use(
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
           localStorage.removeItem('user');
-          window.dispatchEvent(new Event('auth-error'));
+          window.dispatchEvent(new Event(AUTH_ERROR_EVENT));
           return Promise.reject(refreshError);
         }
       } else {
-        window.dispatchEvent(new Event('auth-error'));
+        window.dispatchEvent(new Event(AUTH_ERROR_EVENT));
       }
     }
     return Promise.reject(error);
