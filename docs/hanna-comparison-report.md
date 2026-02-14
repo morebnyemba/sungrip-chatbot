@@ -27,7 +27,7 @@ def cleanup_idle_conversations_task():
     )
     # Clears flow state, resets AI mode, sends timeout notification
     for state in idle_flow_states:
-        _clear_contact_flow_state(contact)
+        _clear_contact_flow_state(state.contact)
     for contact in idle_ai_contacts:
         contact.conversation_mode = 'flow'
         contact.conversation_context = {}
@@ -51,7 +51,7 @@ def cleanup_idle_conversations_task():
 
 **What sungrip needs to add:**
 1. Create `backend/flows/tasks.py` with a `cleanup_idle_conversations_task` that:
-   - Queries `FlowSession.objects.filter(status='active', updated_at__lt=idle_threshold)`
+   - Queries `FlowSession.objects.filter(status='active', updated_at__lt=idle_threshold)` (adjust field name to match your model's timestamp field)
    - Sets sessions to `status='expired'` and `completed_at=timezone.now()`
    - Sends a notification message to the user
 2. Add `CELERY_BEAT_SCHEDULE` to `backend/sungrip_backend/settings.py`:
@@ -258,7 +258,7 @@ def _verify_signature(self, request_body_bytes, x_hub_signature_256, app_secret_
 def verify_signature(payload, signature, app_secret):
     if not signature or not signature.startswith("sha256="):
         return False
-    expected = signature.split("sha256=")[1]
+    expected = signature.split("sha256=", 1)[1]
     computed = hmac.new(app_secret.encode(), payload, hashlib.sha256).hexdigest()
     return hmac.compare_digest(computed, expected)
 ```
