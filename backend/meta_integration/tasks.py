@@ -123,16 +123,27 @@ def _process_incoming_message(webhook_log: WebhookEventLog, payload: Dict[str, A
     else:
         content = f"[{message_type} message]"
 
-    # Create message record
-    message = Message.objects.create(
-        contact=contact,
-        direction="inbound",
-        message_type=message_type,
-        content=content,
+    # Create message record (idempotent for webhook retries)
+    message, created = Message.objects.update_or_create(
         whatsapp_message_id=message_id,
-        status="received",
-        metadata=message_data
+        defaults={
+            'contact': contact,
+            'direction': "inbound",
+            'message_type': message_type,
+            'content': content,
+            'status': "received",
+            'metadata': message_data,
+        }
     )
+
+    if not created:
+        logger.info(f"Message {message_id} already exists (dedup), skipping flow processing")
+        return {
+            "status": "dedup",
+            "message_id": message.id,
+            "contact_id": contact.id,
+            "notes": f"Duplicate message from {from_number}"
+        }
 
     # Link message to webhook log
     webhook_log.message = message
@@ -347,10 +358,12 @@ def _process_flow_response(webhook_log: WebhookEventLog, payload: Dict[str, Any]
         }
 
 
-@shared_task
-def send_message_task(phone_number: str, message_config: Dict[str, Any], config_id: int = None):
+@shared_task(bind=True, max_retries=5, default_retry_delay=3)
+def send_message_task(self, phone_number: str, message_config: Dict[str, Any], config_id: int = None):
     """
-    Send a WhatsApp message asynchronously.
+    Send a WhatsApp message asynchronously with retry logic.
+
+    Following hanna pattern: retries up to 5 times with 3-second delay.
 
     Args:
         phone_number: Recipient phone number in E.164 format
@@ -372,7 +385,7 @@ def send_message_task(phone_number: str, message_config: Dict[str, Any], config_
         return result
     except Exception as e:
         logger.error(f"Error sending message to {phone_number}: {str(e)}", exc_info=True)
-        raise
+        raise self.retry(exc=e)
 
 
 @shared_task

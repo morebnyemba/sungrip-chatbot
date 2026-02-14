@@ -337,17 +337,33 @@ class WebhookProcessor:
         except (IndexError, KeyError, AttributeError):
             pass
 
-        # Create webhook log
-        webhook_log = WebhookEventLog.objects.create(
-            event_identifier=event_identifier,
-            app_config=config,
-            event_type=event_type,
-            payload_object_type=payload.get("object"),
-            payload=payload,
-            phone_number_id_received=phone_number_id,
-            waba_id_received=config.waba_id,
-            processing_status="pending"
-        )
+        # Create or update webhook log (idempotent for webhook retries)
+        if event_identifier:
+            webhook_log, created = WebhookEventLog.objects.update_or_create(
+                event_identifier=event_identifier,
+                app_config=config,
+                defaults={
+                    'event_type': event_type,
+                    'payload_object_type': payload.get("object"),
+                    'payload': payload,
+                    'phone_number_id_received': phone_number_id,
+                    'waba_id_received': config.waba_id,
+                    'processing_status': "pending",
+                }
+            )
+            if not created:
+                logger.info(f"Webhook event already exists (dedup): {event_type} - {event_identifier}")
+        else:
+            webhook_log = WebhookEventLog.objects.create(
+                event_identifier=event_identifier,
+                app_config=config,
+                event_type=event_type,
+                payload_object_type=payload.get("object"),
+                payload=payload,
+                phone_number_id_received=phone_number_id,
+                waba_id_received=config.waba_id,
+                processing_status="pending"
+            )
 
         logger.info(f"Webhook event logged: {event_type} - {event_identifier}")
         return webhook_log

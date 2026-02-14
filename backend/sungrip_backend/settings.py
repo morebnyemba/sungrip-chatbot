@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 from datetime import timedelta
+from celery.schedules import crontab
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -206,6 +207,15 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Africa/Harare'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60
+
+# Celery Beat Schedule
+# Following hanna pattern: periodic tasks for session cleanup
+CELERY_BEAT_SCHEDULE = {
+    'cleanup-idle-sessions': {
+        'task': 'flows.cleanup_idle_sessions_task',
+        'schedule': crontab(minute='*/5'),  # Every 5 minutes
+    },
+}
 
 # WhatsApp/Meta Configuration
 WHATSAPP_API_VERSION = os.environ.get('WHATSAPP_API_VERSION', 'v18.0')
