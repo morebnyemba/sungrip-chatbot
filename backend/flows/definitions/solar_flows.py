@@ -98,7 +98,7 @@ MAIN_MENU_FLOW = {
             "name": "route_to_quote",
             "type": "switch_flow",
             "config": {
-                "target_flow": "solar_quote_request",
+                "target_flow_name": "solar_quote_request",
                 "message": "Great! Let me help you get a quote. 📋"
             },
             "transitions": []
@@ -107,7 +107,7 @@ MAIN_MENU_FLOW = {
             "name": "route_to_installation",
             "type": "switch_flow",
             "config": {
-                "target_flow": "installation_scheduling",
+                "target_flow_name": "installation_scheduling",
                 "message": "Perfect! Let's schedule your installation. 📅"
             },
             "transitions": []
@@ -116,7 +116,7 @@ MAIN_MENU_FLOW = {
             "name": "route_to_packages",
             "type": "switch_flow",
             "config": {
-                "target_flow": "solar_packages",
+                "target_flow_name": "solar_packages",
                 "message": "Let me show you our available solar packages. 📦"
             },
             "transitions": []
@@ -125,7 +125,7 @@ MAIN_MENU_FLOW = {
             "name": "route_to_support",
             "type": "switch_flow",
             "config": {
-                "target_flow": "contact_support",
+                "target_flow_name": "contact_support",
                 "message": "I'll connect you with our support team. 👥"
             },
             "transitions": []
@@ -895,7 +895,7 @@ SOLAR_PACKAGES_FLOW = {
             "name": "switch_to_quote",
             "type": "switch_flow",
             "config": {
-                "target_flow": "solar_quote_request",
+                "target_flow_name": "solar_quote_request",
                 "message": "Excellent! Let me get some details for your quote. 📋"
             },
             "transitions": []
