@@ -6,6 +6,7 @@ Handles incoming webhook requests from Meta WhatsApp Business API.
 """
 import json
 import logging
+from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
@@ -120,9 +121,12 @@ class MetaWebhookAPIView(View):
             # Create webhook log
             webhook_log = WebhookProcessor.process_webhook_event(payload, config)
 
-            # Process asynchronously using Celery
+            # Process asynchronously using Celery (dispatch after DB commit)
             if getattr(settings, 'CELERY_ENABLED', True):
-                process_webhook_event_task.delay(webhook_log.id)
+                webhook_log_id = webhook_log.id
+                transaction.on_commit(
+                    lambda: process_webhook_event_task.delay(webhook_log_id)
+                )
                 logger.info(f"Webhook event queued for processing: {webhook_log.id}")
             else:
                 # Process synchronously if Celery is disabled (development)

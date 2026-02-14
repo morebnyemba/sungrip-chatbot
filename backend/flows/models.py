@@ -236,6 +236,7 @@ class FlowSession(models.Model):
             ('completed', 'Completed'),
             ('abandoned', 'Abandoned'),
             ('error', 'Error'),
+            ('expired', 'Expired'),
         ],
         default='active'
     )

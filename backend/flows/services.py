@@ -381,13 +381,22 @@ class FlowProcessor:
         else:
             logger.warning(f"Unexpected reply at step type {step.step_type}")
 
+    @staticmethod
+    def _get_fallback_key(step_name: str) -> str:
+        """Get the context key for tracking fallback retry count for a step."""
+        return f"_fallback_count_{step_name}"
+
     def _process_question_reply(self, step: FlowStep, reply_text: str):
         """
-        Process reply to a question step.
+        Process reply to a question step with configurable fallback handling.
+        
+        Following hanna pattern: supports re-prompt with max retries
+        and configurable fallback messages.
         """
         reply_config = step.config.get("reply_config", {})
         context_variable = reply_config.get("context_variable")
         expected_type = reply_config.get("expected_type", "text")
+        fallback_key = self._get_fallback_key(step.name)
 
         # Validate and parse reply
         try:
@@ -396,19 +405,54 @@ class FlowProcessor:
             # Store in context
             if context_variable:
                 self.session.context_data[context_variable] = parsed_value
+                # Reset fallback counter on successful input
+                self.session.context_data.pop(fallback_key, None)
                 self.session.save()
                 logger.info(f"Stored {context_variable} = {parsed_value}")
 
             # Move to next step
             self._transition_to_next_step()
         except ValueError as e:
-            # Invalid input, ask again or handle error
-            logger.warning(f"Invalid reply: {str(e)}")
+            # Invalid input - apply fallback/re-prompt handling
             from meta_integration.utils import send_text_message
-            send_text_message(
-                self.contact.phone_number,
+
+            # Get fallback configuration from step config
+            fallback_config = step.config.get("fallback_config", {})
+            max_retries = fallback_config.get("max_retries", 3)
+            fallback_message = fallback_config.get(
+                "fallback_message",
                 f"Invalid input: {str(e)}. Please try again."
             )
+
+            # Track re-prompt count
+            current_count = self.session.context_data.get(fallback_key, 0)
+            current_count += 1
+            self.session.context_data[fallback_key] = current_count
+            self.session.save()
+
+            if current_count < max_retries:
+                # Re-prompt the question
+                logger.info(
+                    f"Re-prompting question step '{step.name}' "
+                    f"(attempt {current_count}/{max_retries}) for contact {self.contact.phone_number}"
+                )
+                send_text_message(self.contact.phone_number, fallback_message)
+            else:
+                # Max retries exceeded
+                logger.warning(
+                    f"Max retries ({max_retries}) exceeded for step '{step.name}' "
+                    f"for contact {self.contact.phone_number}"
+                )
+                exceeded_message = fallback_config.get(
+                    "max_retries_message",
+                    "Too many invalid attempts. Please send 'menu' to start over."
+                )
+                send_text_message(self.contact.phone_number, exceeded_message)
+
+                # End the flow session
+                self.session.status = 'abandoned'
+                self.session.completed_at = timezone.now()
+                self.session.save()
 
     def _process_wait_reply(self, step: FlowStep, reply_text: str):
         """
@@ -811,23 +855,32 @@ class FlowProcessor:
 
     def _handle_error(self, error_message: str):
         """
-        Handle flow execution error.
+        Handle flow execution error with detailed logging.
+
+        Following hanna pattern: includes contact ID and step info in logs.
 
         Args:
             error_message: Error description
         """
-        logger.error(f"Flow error for session {self.session.id}: {error_message}")
+        step_name = self.session.current_step.name if self.session.current_step else 'Unknown'
+        logger.error(
+            f"Flow error for session {self.session.id}, "
+            f"contact {self.contact.id} ({self.contact.phone_number}), "
+            f"flow '{self.flow.name}', step '{step_name}': {error_message}",
+            exc_info=True
+        )
 
         self.session.status = 'error'
         self.session.context_data['error'] = error_message
+        self.session.completed_at = timezone.now()
         self.session.save()
 
-        # Optionally notify user
+        # Notify user of error
         try:
             from meta_integration.utils import send_text_message
             send_text_message(
                 self.contact.phone_number,
-                "Sorry, an error occurred. Please try again or contact support."
+                "Sorry, an error occurred. Please send 'menu' to start over or contact support."
             )
-        except:
-            pass
+        except Exception:
+            logger.exception("Failed to send error notification to contact %s", self.contact.id)
