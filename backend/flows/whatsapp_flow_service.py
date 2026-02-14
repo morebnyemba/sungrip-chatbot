@@ -4,9 +4,10 @@ WhatsApp Flow service for managing interactive flows with Meta's API.
 Following conventions from morebnyemba/hanna repo.
 Handles creation, updating, publishing, syncing, and listing flows with Meta.
 """
-import requests
 import json
 import logging
+import time
+import requests
 from typing import Optional, Dict, Any, List
 from django.utils import timezone
 from django.conf import settings
@@ -211,8 +212,6 @@ class WhatsAppFlowService:
         Returns:
             bool: True if successful, False otherwise
         """
-        import time
-        
         if not whatsapp_flow.flow_id:
             logger.error(f"Cannot update flow JSON: Flow {whatsapp_flow.name} has no flow_id")
             return False

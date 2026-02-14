@@ -381,6 +381,11 @@ class FlowProcessor:
         else:
             logger.warning(f"Unexpected reply at step type {step.step_type}")
 
+    @staticmethod
+    def _get_fallback_key(step_name: str) -> str:
+        """Get the context key for tracking fallback retry count for a step."""
+        return f"_fallback_count_{step_name}"
+
     def _process_question_reply(self, step: FlowStep, reply_text: str):
         """
         Process reply to a question step with configurable fallback handling.
@@ -391,6 +396,7 @@ class FlowProcessor:
         reply_config = step.config.get("reply_config", {})
         context_variable = reply_config.get("context_variable")
         expected_type = reply_config.get("expected_type", "text")
+        fallback_key = self._get_fallback_key(step.name)
 
         # Validate and parse reply
         try:
@@ -400,7 +406,6 @@ class FlowProcessor:
             if context_variable:
                 self.session.context_data[context_variable] = parsed_value
                 # Reset fallback counter on successful input
-                fallback_key = f"_fallback_count_{step.name}"
                 self.session.context_data.pop(fallback_key, None)
                 self.session.save()
                 logger.info(f"Stored {context_variable} = {parsed_value}")
@@ -420,7 +425,6 @@ class FlowProcessor:
             )
 
             # Track re-prompt count
-            fallback_key = f"_fallback_count_{step.name}"
             current_count = self.session.context_data.get(fallback_key, 0)
             current_count += 1
             self.session.context_data[fallback_key] = current_count

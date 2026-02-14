@@ -2,13 +2,14 @@ import logging
 from datetime import timedelta
 
 from celery import shared_task
+from django.conf import settings
 from django.utils import timezone
 
 from .models import FlowSession
 
 logger = logging.getLogger(__name__)
 
-SESSION_IDLE_TIMEOUT_MINUTES = 5
+SESSION_IDLE_TIMEOUT_MINUTES = getattr(settings, 'SESSION_IDLE_TIMEOUT_MINUTES', 5)
 
 
 @shared_task(name="flows.cleanup_idle_sessions_task")
