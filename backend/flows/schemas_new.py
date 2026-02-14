@@ -5,13 +5,12 @@ Provides runtime validation for flow configurations and context data.
 """
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
-from typing import Dict, Any, Optional, List, Literal
+from typing import Dict, Any, Optional, List, Literal, Union
 import logging
 import re
 import ast
 
 logger = logging.getLogger(__name__)
-
 
 # ============================================================================
 # Base Message Component Schemas
@@ -94,7 +93,7 @@ class StepConfigSendMessage(BaseModel):
 
 class ReplyConfig(BaseModel):
     """Configuration for expected reply."""
-    save_to_variable: str
+    save_to_variable: str  # Changed from context_variable to match hanna
     expected_type: Literal['text', 'email', 'number', 'interactive_id', 'image', 'location', 'nfm_reply'] = 'text'
     validation_regex: Optional[str] = None
 
@@ -143,7 +142,6 @@ class StepConfigEndFlow(BaseModel):
     
     message_config: Optional[Dict[str, Any]] = None
 
-
 class WaitForReplyConfig(BaseModel):
     """Configuration for wait_for_reply step."""
     model_config = ConfigDict(extra='allow')
@@ -152,14 +150,12 @@ class WaitForReplyConfig(BaseModel):
     timeout_message: Optional[str] = None
     max_retries: int = 3
 
-
 class TriggerFlowConfig(BaseModel):
     """Configuration for trigger_flow step."""
     model_config = ConfigDict(extra='allow')
     
     target_flow_id: int
     pass_context: bool = True
-
 
 class WhatsAppTemplateConfig(BaseModel):
     """Configuration for whatsapp_template step."""
@@ -168,7 +164,6 @@ class WhatsAppTemplateConfig(BaseModel):
     template_name: str
     template_language_code: str = 'en'
     parameters: Optional[Dict[str, str]] = None
-
 
 class WebhookCallConfig(BaseModel):
     """Configuration for webhook_call step."""
@@ -234,7 +229,6 @@ class StepConfigUnion(BaseModel):
         
         return v
 
-
 # ============================================================================
 # Transition Configuration Schemas
 # ============================================================================
@@ -294,7 +288,6 @@ class ConditionConfig(BaseModel):
         
         return v
 
-
 class TransitionConfigSchema(BaseModel):
     """Configuration for flow transition."""
     model_config = ConfigDict(extra='allow')
@@ -312,7 +305,6 @@ class TransitionConfigSchema(BaseModel):
                 f"target_step_id required for transition type '{transition_type}'"
             )
         return v
-
 
 # ============================================================================
 # Flow Session Context Schemas
@@ -346,7 +338,6 @@ def validate_step_config(step_type: str, config: Dict[str, Any]) -> Dict[str, An
     schema = StepConfigUnion(step_type=step_type, config=config)
     return schema.config
 
-
 def validate_condition_config(condition_config: Dict[str, Any]) -> Dict[str, Any]:
     """Validate condition configuration (for transitions)."""
     try:
@@ -355,7 +346,6 @@ def validate_condition_config(condition_config: Dict[str, Any]) -> Dict[str, Any
     except Exception as e:
         logger.error(f"Condition config validation failed: {str(e)}")
         raise ValueError(f"Invalid condition config: {str(e)}")
-
 
 def validate_transition_config(transition_config: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -377,7 +367,6 @@ def validate_transition_config(transition_config: Dict[str, Any]) -> Dict[str, A
     except Exception as e:
         logger.error(f"Transition config validation failed: {str(e)}")
         raise ValueError(f"Invalid transition config: {str(e)}")
-
 
 def validate_context_data(context: Dict[str, Any]) -> Dict[str, Any]:
     """Validate flow session context data."""
