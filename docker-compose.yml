@@ -129,7 +129,7 @@ services:
       - ./nginx_proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - static_volume:/srv/www/static:ro
       - media_volume:/srv/www/media:ro
-      - letsencrypt_certs:/etc/letsencrypt:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
       - ./nginx_proxy/ssl_custom:/etc/nginx/ssl_custom:ro
       - letsencrypt_webroot:/var/www/letsencrypt
     depends_on:
@@ -142,7 +142,7 @@ services:
     image: certbot/certbot:latest
     container_name: sungrip_certbot
     volumes:
-      - letsencrypt_certs:/etc/letsencrypt
+      - /etc/letsencrypt:/etc/letsencrypt
       - letsencrypt_webroot:/var/www/letsencrypt
       - ./certbot-renew.sh:/usr/local/bin/certbot-renew.sh:ro
     entrypoint: /bin/sh /usr/local/bin/certbot-renew.sh
@@ -153,7 +153,6 @@ volumes:
   redis_data:
   static_volume:
   media_volume:
-  letsencrypt_certs:
   letsencrypt_webroot:
 
 networks:
