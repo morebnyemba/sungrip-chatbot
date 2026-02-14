@@ -88,24 +88,17 @@ class QuestionConfig(BaseModel):
             raise ValueError("question_text cannot be empty")
         return v.strip() if v else v
 
-    @field_validator('options')
-    @classmethod
-    def validate_options(cls, v, info):
-        input_type = info.data.get('input_type')
-        if input_type == 'options' and not v:
-            # Only enforce if using simple format
-            question_text = info.data.get('question_text')
-            if question_text is not None:
-                raise ValueError("options required when input_type is 'options'")
-        return v
-    
     def model_post_init(self, __context):
-        """Validate that at least one format is provided."""
+        """Validate that at least one format is provided and check options requirement."""
         has_simple = self.question_text is not None
         has_whatsapp = self.message_config is not None
         
         if not has_simple and not has_whatsapp:
             raise ValueError("Either 'question_text' or 'message_config' is required")
+        
+        # Check options requirement for simple format
+        if has_simple and self.input_type == 'options' and not self.options:
+            raise ValueError("options required when input_type is 'options'")
 
 
 class WaitForReplyConfig(BaseModel):
