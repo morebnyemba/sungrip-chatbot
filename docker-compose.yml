@@ -42,10 +42,7 @@ services:
   backend:
     build: ./backend
     container_name: sungrip_backend
-    command: >
-      sh -c "python manage.py migrate --noinput &&
-             python manage.py collectstatic --noinput --clear &&
-             gunicorn sungrip_backend.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2 --timeout 120 --access-logfile - --error-logfile - --log-level info"
+    command: web
     volumes:
       - ./backend:/app
       - static_volume:/app/staticfiles
@@ -68,7 +65,7 @@ services:
   celery_worker:
     build: ./backend
     container_name: sungrip_celery_worker
-    command: celery -A sungrip_backend worker --loglevel=info --pool=gevent --concurrency=20
+    command: celery_worker
     volumes:
       - ./backend:/app
       - media_volume:/app/media
@@ -90,7 +87,7 @@ services:
   celery_beat:
     build: ./backend
     container_name: sungrip_celery_beat
-    command: celery -A sungrip_backend beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    command: celery_beat
     volumes:
       - ./backend:/app
       - media_volume:/app/media
