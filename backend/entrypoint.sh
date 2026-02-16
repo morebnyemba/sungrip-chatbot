@@ -15,10 +15,15 @@ wait_for_migrations() {
     RETRY_COUNT=0
     
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-        # Check if all django_celery_beat migrations are applied (no unapplied migrations)
-        MIGRATIONS_OUTPUT=$(python manage.py showmigrations django_celery_beat 2>/dev/null || echo "")
+        # Check if all migrations are applied (not just django_celery_beat)
+        MIGRATIONS_OUTPUT=$(python manage.py showmigrations 2>&1)
+        MIGRATIONS_EXIT_CODE=$?
         
-        if echo "$MIGRATIONS_OUTPUT" | grep -q '\[X\]' && \
+        if [ $MIGRATIONS_EXIT_CODE -ne 0 ]; then
+            echo "Warning: Failed to check migrations: $MIGRATIONS_OUTPUT"
+        elif [ -z "$MIGRATIONS_OUTPUT" ]; then
+            echo "Warning: No migrations found in the project"
+        elif echo "$MIGRATIONS_OUTPUT" | grep -q '\[X\]' && \
            ! echo "$MIGRATIONS_OUTPUT" | grep -q '\[ \]'; then
             echo "All migrations are complete!"
             return 0
