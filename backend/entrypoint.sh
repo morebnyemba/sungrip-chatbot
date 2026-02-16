@@ -16,8 +16,10 @@ wait_for_migrations() {
     
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         # Check if all django_celery_beat migrations are applied (no unapplied migrations)
-        if python manage.py showmigrations django_celery_beat 2>/dev/null | grep -q '\[X\]' && \
-           ! python manage.py showmigrations django_celery_beat 2>/dev/null | grep -q '\[ \]'; then
+        MIGRATIONS_OUTPUT=$(python manage.py showmigrations django_celery_beat 2>/dev/null || echo "")
+        
+        if echo "$MIGRATIONS_OUTPUT" | grep -q '\[X\]' && \
+           ! echo "$MIGRATIONS_OUTPUT" | grep -q '\[ \]'; then
             echo "All migrations are complete!"
             return 0
         fi
@@ -27,7 +29,7 @@ wait_for_migrations() {
         RETRY_COUNT=$((RETRY_COUNT + 1))
     done
     
-    echo "ERROR: Migrations check timed out after $MAX_RETRIES attempts. Cannot start service safely."
+    echo "ERROR: Migrations check timed out after $((MAX_RETRIES * 2)) seconds. Cannot start service safely."
     exit 1
 }
 
