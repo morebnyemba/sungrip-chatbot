@@ -24,8 +24,8 @@ RUN pip install --upgrade pip && \
 # Copy project
 COPY . .
 
-# Set entrypoint permissions
-RUN chmod +x /app/entrypoint.sh
+# Set entrypoint permissions (ensure executable)
+RUN chmod +x /app/entrypoint.sh && ls -la /app/entrypoint.sh
 
 # Expose port
 EXPOSE 8000
