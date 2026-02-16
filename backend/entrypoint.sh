@@ -46,6 +46,8 @@ wait_for_migrations() {
 # Run migrations
 if [ "$1" = "web" ]; then
     echo "Running database migrations..."
+    # Apply built-in app migrations first so auth tables exist before syncdb.
+    python manage.py migrate --noinput
     python manage.py migrate --noinput --run-syncdb
     
     echo "Collecting static files..."

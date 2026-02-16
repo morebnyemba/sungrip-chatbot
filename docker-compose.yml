@@ -42,6 +42,7 @@ services:
   backend:
     build: ./backend
     container_name: sungrip_backend
+    entrypoint: ["/bin/bash", "/app/entrypoint.sh"]
     command: web
     volumes:
       - ./backend:/app
@@ -65,6 +66,7 @@ services:
   celery_worker:
     build: ./backend
     container_name: sungrip_celery_worker
+    entrypoint: ["/bin/bash", "/app/entrypoint.sh"]
     command: celery_worker
     volumes:
       - ./backend:/app
@@ -87,6 +89,7 @@ services:
   celery_beat:
     build: ./backend
     container_name: sungrip_celery_beat
+    entrypoint: ["/bin/bash", "/app/entrypoint.sh"]
     command: celery_beat
     volumes:
       - ./backend:/app
