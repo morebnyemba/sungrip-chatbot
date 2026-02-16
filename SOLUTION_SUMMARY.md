@@ -22,11 +22,11 @@ The issue was caused by a **race condition** in the Docker Compose service start
 
 ### 1. Enhanced Entrypoint Script (`backend/entrypoint.sh`)
 Added a robust `wait_for_migrations()` function that:
-- Polls the database using `python manage.py showmigrations django_celery_beat`
+- Polls the database using `python manage.py showmigrations` (checks ALL app migrations)
 - Checks for both:
   - Presence of applied migrations (contains `[X]`)
   - Absence of unapplied migrations (no `[ ]`)
-- Stores output in a variable to avoid redundant database queries
+- Uses efficient counting to verify all migrations are applied (no redundant grep operations)
 - Times out after 60 seconds with a clear error message
 - Exits with error code 1 if migrations aren't complete (fail-fast behavior)
 

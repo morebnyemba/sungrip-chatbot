@@ -19,9 +19,10 @@ This occurred because of a race condition where:
 ### Changes Made
 
 1. **entrypoint.sh** - Added a `wait_for_migrations()` function that:
-   - Polls the database using `python manage.py showmigrations django_celery_beat`
+   - Polls the database using `python manage.py showmigrations` (checks ALL app migrations)
    - Waits up to 60 seconds (30 retries × 2 seconds) for migrations to complete
-   - Only starts the celery service after confirming migrations are applied
+   - Uses efficient counting to verify all migrations are applied
+   - Only starts the celery service after confirming ALL migrations are applied
 
 2. **Dockerfile** - Updated to:
    - Copy and set execute permissions on entrypoint.sh
