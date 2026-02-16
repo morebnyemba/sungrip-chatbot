@@ -77,7 +77,7 @@ To test that the fix works:
    # Backend should show migrations running
    docker compose logs backend
    
-   # Celery services should show "Waiting for migrations..." then "Migrations are complete!"
+   # Celery services should show "Waiting for migrations..." then "All migrations are complete!"
    docker compose logs celery_beat
    docker compose logs celery_worker
    ```
