@@ -432,68 +432,202 @@ class FlowAPITests(APITestCase):
 # These tests need to be refactored to test process_message_for_flow() function
 # TODO: Rewrite these tests for the new function-based API
 
-# class FlowIntegrationTests(TransactionTestCase):
-#     """End-to-end integration tests for flows."""
-# 
-#     def setUp(self):
-#         self.contact = Contact.objects.create(
-#             phone_number='+1234567890',
-#             source='whatsapp'
-#         )
-#         
-#         # Create a simple 3-step flow
-#         self.flow = Flow.objects.create(
-#             name='simple_flow',
-#             is_active=True
-#         )
-# 
-#         self.step1 = FlowStep.objects.create(
-#             flow=self.flow,
-#             name='start',
-#             step_type='send_message',
-#             config={'message': 'Getting started'},
-#             is_entry_point=True
-#         )
-# 
-#         self.step2 = FlowStep.objects.create(
-#             flow=self.flow,
-#             name='ask_name',
-#             step_type='question',
-#             config={'question_text': 'What is your name?'}
-#         )
-# 
-#         self.step3 = FlowStep.objects.create(
-#             flow=self.flow,
-#             name='confirm',
-#             step_type='send_message',
-#             config={'message': 'Thanks {{user_name}}!'}
-#         )
-# 
-#         FlowTransition.objects.create(
-#             current_step=self.step1,
-#             next_step=self.step2,
-#             condition_config={'type': 'auto'}
-#         )
-# 
-#         FlowTransition.objects.create(
-#             current_step=self.step2,
-#             next_step=self.step3,
-#             condition_config={'type': 'auto'}
-#         )
-# 
-#     def test_complete_flow_execution(self):
-#         """Test executing a complete flow from start to end."""
-#         # Start the flow
-#         processor = FlowProcessor.start_flow(self.contact, self.flow)
-#         
-#         # Verify we're at step 1
-#         self.assertEqual(processor.session.current_step, self.step1)
-# 
-#         # Move to step 2
-#         processor.execute_current_step()
-#         # In real scenario, would call move_to_next_step() after user reply
-#         # processor.move_to_next_step()
-#         
-#         # Session should still be active
-#         processor.session.refresh_from_db()
-#         self.assertEqual(processor.session.status, 'active')
+    def setUp(self):
+        self.contact = Contact.objects.create(
+            phone_number='+1234567890',
+            source='whatsapp'
+        )
+        
+        # Create a simple 3-step flow
+        self.flow = Flow.objects.create(
+            name='simple_flow',
+            is_active=True
+        )
+
+        self.step1 = FlowStep.objects.create(
+            flow=self.flow,
+            name='start',
+            step_type='send_message',
+            config={'message': 'Getting started'},
+            is_entry_point=True
+        )
+
+        self.step2 = FlowStep.objects.create(
+            flow=self.flow,
+            name='ask_name',
+            step_type='question',
+            config={'question_text': 'What is your name?'}
+        )
+
+        self.step3 = FlowStep.objects.create(
+            flow=self.flow,
+            name='confirm',
+            step_type='send_message',
+            config={'message': 'Thanks {{user_name}}!'}
+        )
+
+        FlowTransition.objects.create(
+            current_step=self.step1,
+            next_step=self.step2,
+            condition_config={'type': 'auto'}
+        )
+
+        FlowTransition.objects.create(
+            current_step=self.step2,
+            next_step=self.step3,
+            condition_config={'type': 'auto'}
+        )
+
+    def test_complete_flow_execution(self):
+        """Test executing a complete flow from start to end."""
+        # Start the flow
+        processor = FlowProcessor.start_flow(self.contact, self.flow)
+        
+        # Verify we're at step 1
+        self.assertEqual(processor.session.current_step, self.step1)
+
+        # Move to step 2
+        processor.execute_current_step()
+        # In real scenario, would call move_to_next_step() after user reply
+        # processor.move_to_next_step()
+        
+        # Session should still be active
+        processor.session.refresh_from_db()
+        self.assertEqual(processor.session.status, 'active')
+
+
+# ============================================================================
+# Flow Action Tests
+# ============================================================================
+
+class FlowActionTests(TransactionTestCase):
+    """Tests for flow actions."""
+
+    def setUp(self):
+        """Set up test data."""
+        from customers.models import Customer
+        
+        self.customer = Customer.objects.create(
+            phone_number='+1234567890',
+            full_name='John Doe',
+            email='john@example.com'
+        )
+        
+        self.contact = Contact.objects.create(
+            whatsapp_id='1234567890',
+            phone_number='+1234567890',
+            profile_name='John Doe',
+            customer=self.customer
+        )
+
+    def test_save_quote_request_action(self):
+        """Test save_quote_request flow action saves to database."""
+        from .actions import save_quote_request
+        from orders.models import QuoteRequest
+        
+        # Prepare context
+        context = {
+            'monthly_bill': 150.50,
+            'roof_type': 'tile',
+            'location': 'Harare, Zimbabwe'
+        }
+        
+        # Call the action
+        result_context = save_quote_request(
+            contact=self.contact,
+            context=context,
+            params={'save_to_variable': 'quote_saved'}
+        )
+        
+        # Check that context was updated
+        self.assertIn('quote_saved', result_context)
+        saved_data = result_context['quote_saved']
+        
+        # Verify success
+        self.assertTrue(saved_data.get('success'))
+        self.assertIn('id', saved_data)
+        self.assertIn('request_id', saved_data)
+        
+        # Verify database record was created
+        quote_request = QuoteRequest.objects.get(id=saved_data['id'])
+        self.assertEqual(quote_request.customer, self.customer)
+        self.assertEqual(quote_request.contact, self.contact)
+        self.assertEqual(quote_request.customer_name, 'John Doe')
+        self.assertEqual(float(quote_request.monthly_bill), 150.50)
+        self.assertEqual(quote_request.roof_type, 'tile')
+        self.assertEqual(quote_request.location, 'Harare, Zimbabwe')
+        self.assertEqual(quote_request.status, 'pending')
+
+    def test_save_quote_request_without_customer(self):
+        """Test save_quote_request when contact has no linked customer."""
+        from .actions import save_quote_request
+        from orders.models import QuoteRequest
+        
+        # Create contact without customer
+        contact_no_customer = Contact.objects.create(
+            whatsapp_id='9876543210',
+            phone_number='+9876543210',
+            profile_name='Jane Smith'
+        )
+        
+        context = {
+            'monthly_bill': 200.00,
+            'roof_type': 'metal',
+            'location': 'Bulawayo'
+        }
+        
+        # Call the action
+        result_context = save_quote_request(
+            contact=contact_no_customer,
+            context=context,
+            params={}
+        )
+        
+        # Verify database record
+        saved_data = result_context['quote_request_saved']
+        quote_request = QuoteRequest.objects.get(id=saved_data['id'])
+        
+        self.assertIsNone(quote_request.customer)
+        self.assertEqual(quote_request.contact, contact_no_customer)
+        self.assertEqual(quote_request.customer_name, 'Jane Smith')
+
+    def test_save_quote_request_error_handling(self):
+        """Test save_quote_request handles errors gracefully."""
+        from .actions import save_quote_request
+        
+        # Call with invalid data (contact without required attribute)
+        context = {'monthly_bill': 'invalid'}  # Invalid type
+        
+        # The function should handle errors gracefully
+        result_context = save_quote_request(
+            contact=None,
+            context=context,
+            params={}
+        )
+        
+        # Should return error status
+        saved_data = result_context.get('quote_request_saved', {})
+        # Even with errors, it should create the record or return error info
+        self.assertIn('success', saved_data)
+
+    def test_calculate_solar_quote_action(self):
+        """Test calculate_solar_quote action."""
+        from .actions import calculate_solar_quote
+        
+        context = {'monthly_bill': 120}
+        
+        result_context = calculate_solar_quote(
+            contact=self.contact,
+            context=context,
+            params={'save_to_variable': 'solar_quote'}
+        )
+        
+        # Check result
+        self.assertIn('solar_quote', result_context)
+        quote_data = result_context['solar_quote']
+        
+        self.assertTrue(quote_data.get('success'))
+        self.assertEqual(quote_data['monthly_bill'], 120)
+        self.assertIn('estimated_system_size_kw', quote_data)
+        self.assertIn('estimated_cost', quote_data)
+        self.assertIn('estimated_roi_months', quote_data)
