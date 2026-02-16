@@ -46,7 +46,7 @@ wait_for_migrations() {
 # Run migrations
 if [ "$1" = "web" ]; then
     echo "Running database migrations..."
-    python manage.py migrate --noinput
+    python manage.py migrate --noinput --run-syncdb
     
     echo "Collecting static files..."
     python manage.py collectstatic --noinput --clear

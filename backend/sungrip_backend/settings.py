@@ -69,6 +69,17 @@ INSTALLED_APPS = [
     'flows',
 ]
 
+LOCAL_APPS = [
+    'conversations',
+    'customers',
+    'products',
+    'orders',
+    'meta_integration',
+    'flows',
+]
+
+MIGRATION_MODULES = {app: None for app in LOCAL_APPS}
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Static files
