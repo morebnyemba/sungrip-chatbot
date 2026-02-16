@@ -24,8 +24,14 @@ RUN pip install --upgrade pip && \
 # Copy project
 COPY . .
 
+# Set entrypoint permissions
+RUN chmod +x /app/entrypoint.sh
+
 # Expose port
 EXPOSE 8000
 
-# Command to run the application
-CMD ["gunicorn", "sungrip_backend.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--threads", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "--log-level", "info"]
+# Set entrypoint
+ENTRYPOINT ["/app/entrypoint.sh"]
+
+# Default command
+CMD ["web"]
