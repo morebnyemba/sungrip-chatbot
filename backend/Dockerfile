@@ -30,8 +30,8 @@ RUN chmod +x /app/entrypoint.sh && ls -la /app/entrypoint.sh
 # Expose port
 EXPOSE 8000
 
-# Set entrypoint
-ENTRYPOINT ["/app/entrypoint.sh"]
+# Set entrypoint (invoke via bash to avoid bind-mount exec bit issues)
+ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]
 
 # Default command
 CMD ["web"]
