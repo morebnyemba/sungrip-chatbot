@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 from django.utils import timezone
 from django.db import transaction
 
-from .models import WhatsAppFlow, WhatsAppFlowResponse, FlowSession
+from .models import WhatsAppFlow, WhatsAppFlowResponse, ContactFlowState
 from conversations.models import Contact
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ class WhatsAppFlowResponseProcessor:
         
         This method:
         1. Saves the WhatsAppFlowResponse for audit/history
-        2. Updates the active FlowSession with the response data
+        2. Updates the active ContactFlowState with the response data
         3. Sets a flag to trigger automatic transition in the flow
         
         Args:
@@ -59,7 +59,7 @@ class WhatsAppFlowResponseProcessor:
             )
 
             # Update the flow session for the contact (if in a flow)
-            flow_session = FlowSession.objects.select_for_update().filter(
+            flow_session = ContactFlowState.objects.select_for_update().filter(
                 contact=contact,
                 status='active'
             ).first()
@@ -99,14 +99,18 @@ class WhatsAppFlowResponseProcessor:
             )
             
             # Trigger flow progression to process the response
-            from .services import FlowProcessor
-            processor = FlowProcessor(flow_session)
+            # The flow will check the whatsapp_flow_response_received flag in context
+            from .services import process_message_for_flow
             
             # Create a synthetic message to trigger flow progression
-            # The flow will check the whatsapp_flow_response_received flag in context
-            processor.process_user_reply("__whatsapp_flow_response__")
+            message_data = {
+                'message_type': 'interactive',
+                'interactive': {'type': 'button_reply', 'button_reply': {'title': '__whatsapp_flow_response__'}}
+            }
             
-            logger.info(f"Triggered flow progression for session {flow_session.id}")
+            actions = process_message_for_flow(contact, message_data, incoming_message_obj=None)
+            
+            logger.info(f"Triggered flow progression for contact {contact.phone_number}. Generated {len(actions)} actions.")
             
             return {
                 "success": True, 

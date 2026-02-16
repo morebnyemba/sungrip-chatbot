@@ -214,19 +214,20 @@ def _trigger_flow_processing(contact, message, content: str):
         message: Message instance
         content: Message text content
     """
-    from flows.models import Flow, FlowSession
+    from flows.models import Flow, ContactFlowState
+    from flows.services import process_message_for_flow
 
     # Check if contact has an active flow session
-    active_session = FlowSession.objects.filter(
+    active_session = ContactFlowState.objects.filter(
         contact=contact,
         status='active'
     ).first()
 
     if active_session:
-        # Process within existing flow
-        from flows.services import FlowProcessor
-        processor = FlowProcessor(active_session)
-        processor.process_user_reply(content)
+        # Process within existing flow using function-based API
+        message_data = {'message_type': 'text', 'text': {'body': content}}
+        actions = process_message_for_flow(contact, message_data, incoming_message_obj=message)
+        logger.info(f"Processed message for contact {contact.phone_number} in existing flow. Generated {len(actions)} actions.")
     else:
         # Check for flow triggers
         content_lower = content.lower()
@@ -236,10 +237,10 @@ def _trigger_flow_processing(contact, message, content: str):
         ).first()
 
         if triggered_flow:
-            # Start new flow session
-            from flows.services import FlowProcessor
-            processor = FlowProcessor.start_flow(triggered_flow, contact)
-            logger.info(f"Started flow {triggered_flow.name} for contact {contact.phone_number}")
+            # Trigger new flow using the new function-based API
+            message_data = {'message_type': 'text', 'text': {'body': content}}
+            actions = process_message_for_flow(contact, message_data, incoming_message_obj=message)
+            logger.info(f"Triggered flow {triggered_flow.name} for contact {contact.phone_number}. Generated {len(actions)} actions.")
 
 
 def _process_flow_response(webhook_log: WebhookEventLog, payload: Dict[str, Any]) -> Dict[str, Any]:

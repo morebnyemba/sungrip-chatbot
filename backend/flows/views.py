@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 import logging
 
-from .models import Flow, FlowStep, FlowTransition, FlowSession, WhatsAppFlow, WhatsAppFlowResponse
+from .models import Flow, FlowStep, FlowTransition, ContactFlowState, WhatsAppFlow, WhatsAppFlowResponse
 from conversations.models import Contact
 
 logger = logging.getLogger(__name__)
@@ -68,15 +68,15 @@ class FlowSerializer(serializers.ModelSerializer):
         return obj.steps.count()
 
 
-class FlowSessionSerializer(serializers.ModelSerializer):
-    """Serializer for FlowSession."""
+class ContactFlowStateSerializer(serializers.ModelSerializer):
+    """Serializer for ContactFlowState."""
 
     contact_phone = serializers.CharField(source='contact.phone_number', read_only=True)
     flow_name = serializers.CharField(source='flow.name', read_only=True)
     current_step_name = serializers.CharField(source='current_step.name', read_only=True)
 
     class Meta:
-        model = FlowSession
+        model = ContactFlowState
         fields = [
             'id', 'contact', 'contact_phone', 'flow', 'flow_name',
             'current_step', 'current_step_name', 'context_data',
@@ -171,7 +171,7 @@ class FlowViewSet(viewsets.ModelViewSet):
         if status_filter:
             sessions = sessions.filter(status=status_filter)
 
-        serializer = FlowSessionSerializer(sessions, many=True)
+        serializer = ContactFlowStateSerializer(sessions, many=True)
         return Response(serializer.data)
 
 
@@ -210,10 +210,10 @@ class FlowTransitionViewSet(viewsets.ModelViewSet):
         serializer.save()
 
 
-class FlowSessionViewSet(viewsets.ModelViewSet):
+class ContactFlowStateViewSet(viewsets.ModelViewSet):
     """ViewSet for managing flow sessions."""
 
-    serializer_class = FlowSessionSerializer
+    serializer_class = ContactFlowStateSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['contact', 'flow', 'status']
@@ -221,7 +221,7 @@ class FlowSessionViewSet(viewsets.ModelViewSet):
     ordering = ['-started_at']
 
     def get_queryset(self):
-        return FlowSession.objects.prefetch_related('contact', 'flow', 'current_step')
+        return ContactFlowState.objects.prefetch_related('contact', 'flow', 'current_step')
 
     @action(detail=True, methods=['post'])
     def abandon(self, request, pk=None):
@@ -235,7 +235,7 @@ class FlowSessionViewSet(viewsets.ModelViewSet):
             
             return Response({
                 'status': 'Session abandoned',
-                'session': FlowSessionSerializer(session).data
+                'session': ContactFlowStateSerializer(session).data
             })
         
         return Response(
@@ -253,7 +253,7 @@ class FlowSessionViewSet(viewsets.ModelViewSet):
         
         return Response({
             'status': 'Session completed',
-            'session': FlowSessionSerializer(session).data
+            'session': ContactFlowStateSerializer(session).data
         })
 
     @action(detail=True, methods=['get'])

@@ -1,313 +1,263 @@
-"""Pydantic schemas for flows app validation.
-
-Following conventions from morebnyemba/hanna and morebnyemba/whatsappcrm.
-Provides runtime validation for flow configurations and context data.
+# backend/flows/schemas.py
 """
+Pydantic schemas for flow step configurations.
+Copied from morebnyemba/hanna for validation consistency.
+"""
+from pydantic import BaseModel, Field
+from typing import Dict, Any, Optional, List, Literal, Union
 
-from typing import Optional, Dict, Any, List, Literal
-from pydantic import BaseModel, field_validator, ConfigDict
-import logging
 
-logger = logging.getLogger(__name__)
+# --- Base Message Component Schemas ---
 
+class TextContent(BaseModel):
+    body: str
+    preview_url: bool = False
 
-# ============================================================================
-# Step Configuration Schemas
-# ============================================================================
 
-class SendMessageConfig(BaseModel):
-    """Configuration for send_message step."""
+class MediaMessageContent(BaseModel):
+    asset_pk: Optional[int] = None
+    id: Optional[str] = None
+    link: Optional[str] = None
+    caption: Optional[str] = None
+    filename: Optional[str] = None  # Specific to documents
 
-    model_config = ConfigDict(extra='allow')  # Allow extra fields for variables
 
-    message: str  # Message text (supports {{variables}})
-    media_url: Optional[str] = None
-    quick_replies: Optional[List[str]] = None
+# Interactive Message Schemas
+class InteractiveButton(BaseModel):
+    type: Literal['reply'] = 'reply'
+    reply: Dict[str, str]  # e.g., {"id": "unique-id", "title": "Click me"}
 
-    @field_validator('message')
-    @classmethod
-    def message_not_empty(cls, v):
-        if not v or not v.strip():
-            raise ValueError("message cannot be empty")
-        return v.strip()
 
+class InteractiveRow(BaseModel):
+    id: str
+    title: str
+    description: Optional[str] = None
 
-class QuestionConfig(BaseModel):
-    """Configuration for question step."""
 
-    model_config = ConfigDict(extra='allow')
+class InteractiveSection(BaseModel):
+    title: Optional[str] = None
+    rows: Union[List[InteractiveRow], str]  # Allow string for template
 
-    question_text: str
-    input_type: Literal['text', 'options', 'phone', 'email'] = 'text'
-    options: Optional[List[str]] = None
-    required: bool = True
-    validation_pattern: Optional[str] = None  # Regex pattern for validation
 
-    @field_validator('question_text')
-    @classmethod
-    def question_not_empty(cls, v):
-        if not v or not v.strip():
-            raise ValueError("question_text cannot be empty")
-        return v.strip()
+class InteractiveAction(BaseModel):
+    buttons: Optional[List[InteractiveButton]] = None
+    button: Optional[str] = None  # For list messages
+    sections: Optional[List[InteractiveSection]] = None
+    # For Flow type
+    name: Optional[Literal['flow']] = None
+    parameters: Optional[Dict[str, Any]] = None
 
-    @field_validator('options')
-    @classmethod
-    def validate_options(cls, v, info):
-        input_type = info.data.get('input_type')
-        if input_type == 'options' and not v:
-            raise ValueError("options required when input_type is 'options'")
-        return v
 
+class InteractiveBody(BaseModel):
+    text: str
 
-class WaitForReplyConfig(BaseModel):
-    """Configuration for wait_for_reply step."""
 
-    model_config = ConfigDict(extra='allow')
+class InteractiveHeader(BaseModel):
+    type: Literal['text', 'video', 'image', 'document']
+    text: Optional[str] = None
+    # TODO: Add media objects for other header types
 
-    timeout_seconds: int = 300
-    timeout_message: Optional[str] = None
-    max_retries: int = 3
 
+class InteractiveFooter(BaseModel):
+    text: str
 
-class TriggerFlowConfig(BaseModel):
-    """Configuration for trigger_flow step."""
 
-    model_config = ConfigDict(extra='allow')
+class InteractiveMessagePayload(BaseModel):
+    type: Literal['button', 'list', 'flow']
+    action: InteractiveAction
+    body: InteractiveBody
+    header: Optional[InteractiveHeader] = None
+    footer: Optional[InteractiveFooter] = None
 
-    target_flow_id: int
-    pass_context: bool = True
 
+# Template Message Schemas
+class TemplateParameter(BaseModel):
+    type: str  # 'text', 'currency', 'date_time', 'image', 'document', 'video', 'payload'
+    text: Optional[str] = None
+    payload: Optional[str] = None
+    # TODO: Add other parameter types like currency, date_time, image, etc.
 
-class WhatsAppTemplateConfig(BaseModel):
-    """Configuration for whatsapp_template step."""
 
-    model_config = ConfigDict(extra='allow')
+class TemplateComponent(BaseModel):
+    type: Literal['header', 'body', 'button']
+    sub_type: Optional[str] = None  # e.g., 'quick_reply', 'url'
+    parameters: List[TemplateParameter]
 
-    template_name: str
-    template_language_code: str = 'en'
-    parameters: Optional[Dict[str, str]] = None
 
+class TemplateLanguage(BaseModel):
+    code: str
 
-class WebhookCallConfig(BaseModel):
-    """Configuration for webhook_call step."""
 
-    model_config = ConfigDict(extra='allow')
+class TemplateMessagePayload(BaseModel):
+    name: str
+    language: TemplateLanguage
+    components: Optional[List[TemplateComponent]] = None
 
-    webhook_url: str
-    method: Literal['GET', 'POST', 'PUT', 'DELETE'] = 'POST'
-    headers: Optional[Dict[str, str]] = None
-    timeout_seconds: int = 30
 
+# Other Message Types
+class ContactAddress(BaseModel):
+    street: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip: Optional[str] = None  # Changed from 'zip_code' to match WhatsApp API
+    country: Optional[str] = None
+    country_code: Optional[str] = None
+    type: Optional[Literal['HOME', 'WORK']] = None
 
-class StepConfigUnion(BaseModel):
-    """Union of all step configs - validates based on step_type."""
 
-    model_config = ConfigDict(extra='allow')
+class ContactEmail(BaseModel):
+    email: Optional[str] = None
+    type: Optional[Literal['HOME', 'WORK']] = None
 
-    step_type: Literal[
-        'send_message',
-        'question',
-        'wait_for_reply',
-        'trigger_flow',
-        'whatsapp_template',
-        'webhook_call',
-    ]
-    config: Dict[str, Any]
-
-    @field_validator('config', mode='before')
-    @classmethod
-    def validate_config_by_type(cls, v, info):
-        """Validate config dictionary based on step_type."""
-        step_type = info.data.get('step_type')
-
-        if not isinstance(v, dict):
-            raise ValueError("config must be a dictionary")
-
-        try:
-            if step_type == 'send_message':
-                SendMessageConfig(**v)
-            elif step_type == 'question':
-                QuestionConfig(**v)
-            elif step_type == 'wait_for_reply':
-                WaitForReplyConfig(**v)
-            elif step_type == 'trigger_flow':
-                TriggerFlowConfig(**v)
-            elif step_type == 'whatsapp_template':
-                WhatsAppTemplateConfig(**v)
-            elif step_type == 'webhook_call':
-                WebhookCallConfig(**v)
-        except Exception as e:
-            logger.error(f"Config validation failed for {step_type}: {str(e)}")
-            raise ValueError(f"Invalid config for step_type '{step_type}': {str(e)}")
-
-        return v
-
-
-# ============================================================================
-# Transition Configuration Schemas
-# ============================================================================
-
-class ConditionConfig(BaseModel):
-    """Configuration for transition condition."""
-
-    model_config = ConfigDict(extra='allow')
-
-    type: Literal[
-        'auto',
-        'condition_true',
-        'condition_false',
-        'user_reply_matches',
-        'context_variable_equals',
-    ] = 'auto'
-    condition: Optional[str] = None  # Expression like "monthly_bill > 100"
-    variable: Optional[str] = None  # Variable name for context checks
-    value: Optional[Any] = None  # Expected value
-    pattern: Optional[str] = None  # Regex pattern for reply matching
-    keywords: Optional[List[str]] = None  # Keywords for reply matching
-    match_type: Literal['exact', 'contains'] = 'contains'
-
-    @field_validator('condition')
-    @classmethod
-    def validate_expression(cls, v, info):
-        """Validate condition expression syntax."""
-        if v is None:
-            return v
-
-        import ast
-        try:
-            ast.parse(v, mode='eval')
-        except SyntaxError as e:
-            raise ValueError(f"Invalid condition expression: {str(e)}")
-
-        return v
-
-    @field_validator('pattern')
-    @classmethod
-    def validate_regex(cls, v):
-        """Validate regex pattern."""
-        if v is None:
-            return v
-
-        import re
-        try:
-            re.compile(v)
-        except re.error as e:
-            raise ValueError(f"Invalid regex pattern: {str(e)}")
-
-        return v
-
-
-class TransitionConfigSchema(BaseModel):
-    """Configuration for flow transition."""
-
-    model_config = ConfigDict(extra='allow')
-
-    type: Literal['sequential', 'conditional', 'loop', 'end'] = 'sequential'
-    target_step_id: Optional[int] = None
-    condition_config: Optional[ConditionConfig] = None
-
-    @field_validator('target_step_id')
-    @classmethod
-    def validate_target(cls, v, info):
-        transition_type = info.data.get('type')
-        if transition_type in ['sequential', 'conditional', 'loop'] and not v:
-            raise ValueError(
-                f"target_step_id required for transition type '{transition_type}'"
-            )
-        return v
-
-
-# ============================================================================
-# Flow Session Context Schemas
-# ============================================================================
-
-class FlowSessionContext(BaseModel):
-    """Schema for flow session context data."""
-
-    model_config = ConfigDict(extra='allow')
-
-    # Standard fields
-    contact_phone: Optional[str] = None
-    contact_name: Optional[str] = None
-
-    # Flow progress
-    current_step_id: Optional[int] = None
-
-    # Custom fields allowed (extra='allow')
-    # These represent business context like monthly_bill, roof_type, etc.
-
-    @field_validator('contact_phone')
-    @classmethod
-    def validate_phone(cls, v):
-        """Validate phone number format."""
-        if v and not v.replace(' ', '').replace('+', '').isdigit():
-            # Allow phone-like strings
-            pass
-        return v
-
-
-# ============================================================================
-# Factory Functions for Schema Validation
-# ============================================================================
-
-
-def validate_step_config(step_type: str, config: Dict[str, Any]) -> Dict[str, Any]:
+
+class ContactName(BaseModel):
+    formatted_name: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    middle_name: Optional[str] = None
+    suffix: Optional[str] = None
+    prefix: Optional[str] = None
+
+
+class ContactOrg(BaseModel):
+    company: Optional[str] = None
+    department: Optional[str] = None
+    title: Optional[str] = None
+
+
+class ContactPhone(BaseModel):
+    phone: Optional[str] = None
+    type: Optional[Literal['CELL', 'MAIN', 'IPHONE', 'HOME', 'WORK']] = None
+    wa_id: Optional[str] = None
+
+
+class ContactUrl(BaseModel):
+    url: Optional[str] = None
+    type: Optional[Literal['HOME', 'WORK']] = None
+
+
+class ContactPayload(BaseModel):
+    addresses: Optional[List[ContactAddress]] = None
+    birthday: Optional[str] = None  # YYYY-MM-DD
+    emails: Optional[List[ContactEmail]] = None
+    name: ContactName
+    org: Optional[ContactOrg] = None
+    phones: Optional[List[ContactPhone]] = None
+    urls: Optional[List[ContactUrl]] = None
+
+
+class LocationPayload(BaseModel):
+    latitude: float
+    longitude: float
+    name: Optional[str] = None
+    address: Optional[str] = None
+
+
+# --- Main Step Config Schemas ---
+
+class StepConfigSendMessage(BaseModel):
+    """Configuration for send_message step type."""
+    message_type: Literal['text', 'image', 'document', 'audio', 'video', 'sticker', 'interactive', 'template', 'contacts', 'location']
+    text: Optional[TextContent] = None
+    image: Optional[MediaMessageContent] = None
+    document: Optional[MediaMessageContent] = None
+    audio: Optional[MediaMessageContent] = None
+    video: Optional[MediaMessageContent] = None
+    sticker: Optional[MediaMessageContent] = None
+    interactive: Optional[InteractiveMessagePayload] = None
+    template: Optional[TemplateMessagePayload] = None
+    contacts: Optional[List[ContactPayload]] = None
+    location: Optional[LocationPayload] = None
+
+
+class FallbackConfig(BaseModel):
     """
-    Validate step configuration and return validated dict.
-
-    Args:
-        step_type: Type of step
-        config: Configuration dictionary
-
-    Returns:
-        Validated configuration
-
-    Raises:
-        ValueError: If validation fails
+    Configuration for what happens when a user's reply to a question is invalid.
     """
-    schema = StepConfigUnion(step_type=step_type, config=config)
-    return schema.config
+    action: Literal['re_prompt'] = 're_prompt'
+    max_retries: int = Field(2, ge=0, description="Number of times to re-prompt before giving up.")
+    re_prompt_message_text: Optional[str] = None
+    action_after_retries: Optional[Literal['human_handover', 'end_flow', 'switch_flow']] = Field(
+        None, 
+        description="Action to take after all retries are exhausted."
+    )
+    config_after_retries: Optional[Dict[str, Any]] = Field(
+        default_factory=dict, 
+        description="Configuration for the action_after_retries (e.g., message for handover)."
+    )
 
 
-def validate_transition_config(
-    transition_config: Dict[str, Any],
-) -> Dict[str, Any]:
-    """
-    Validate transition configuration.
-
-    Args:
-        transition_config: Transition configuration dictionary
-
-    Returns:
-        Validated configuration
-
-    Raises:
-        ValueError: If validation fails
-    """
-    try:
-        schema = TransitionConfigSchema(**transition_config)
-        return schema.model_dump(exclude_unset=True)
-    except Exception as e:
-        logger.error(f"Transition config validation failed: {str(e)}")
-        raise ValueError(f"Invalid transition config: {str(e)}")
+class ReplyConfig(BaseModel):
+    """Configuration for expected reply to a question."""
+    save_to_variable: str
+    expected_type: Literal['text', 'email', 'number', 'interactive_id', 'image', 'location', 'nfm_reply'] = 'text'
+    validation_regex: Optional[str] = None
 
 
-def validate_context_data(context: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Validate flow session context data.
+class StepConfigQuestion(BaseModel):
+    """Configuration for question step type."""
+    message_config: Dict[str, Any]
+    reply_config: ReplyConfig
+    fallback_config: Optional[FallbackConfig] = None
 
-    Args:
-        context: Context dictionary
 
-    Returns:
-        Validated context
+class ActionItem(BaseModel):
+    """Single action within an action step."""
+    action_type: str
+    
+    # Used by 'set_context_variable', 'query_model'
+    variable_name: Optional[str] = None
+    
+    # Used by 'set_context_variable', 'update_contact_field'
+    value_template: Optional[Any] = None
+    
+    # Used by 'update_contact_field'
+    field_path: Optional[str] = None
+    
+    # Used by 'update_customer_profile'
+    fields_to_update: Optional[Dict[str, Any]] = None
+    
+    # Used by 'send_admin_notification'
+    message_template: Optional[str] = None
+    
+    # Used by 'query_model'
+    app_label: Optional[str] = None
+    model_name: Optional[str] = None
+    filters_template: Optional[Dict[str, Any]] = None
+    order_by: Optional[List[str]] = None
+    
+    # Used by 'query_model' for optimization
+    fields_to_return: Optional[List[str]] = None
+    limit: Optional[int] = None
+    
+    # Used by 'create_model_instance'
+    fields_template: Optional[Dict[str, Any]] = None
+    save_to_variable: Optional[str] = None
+    
+    # Used by custom actions
+    params_template: Optional[Dict[str, Any]] = None
 
-    Raises:
-        ValueError: If validation fails
-    """
-    try:
-        schema = FlowSessionContext(**context)
-        return schema.model_dump(exclude_unset=True)
-    except Exception as e:
-        logger.error(f"Context data validation failed: {str(e)}")
-        raise ValueError(f"Invalid context data: {str(e)}")
+
+class StepConfigAction(BaseModel):
+    """Configuration for action step type."""
+    actions_to_run: List[ActionItem]
+
+
+class StepConfigHumanHandover(BaseModel):
+    """Configuration for human_handover step type."""
+    pre_handover_message_text: Optional[str] = None
+    notification_details: Optional[str] = None
+
+
+class StepConfigEndFlow(BaseModel):
+    """Configuration for end_flow step type."""
+    message_config: Optional[Dict[str, Any]] = None  # Can be validated against StepConfigSendMessage
+
+
+class StepConfigSwitchFlow(BaseModel):
+    """Configuration for switch_flow step type."""
+    target_flow_name: str
+    initial_context_template: Optional[Dict[str, Any]] = None
+    trigger_keyword_to_pass: Optional[str] = None
+
+    model_config = ConfigDict(extra='allow')

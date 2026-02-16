@@ -14,7 +14,7 @@ router = DefaultRouter()
 router.register(r'flows', views.FlowViewSet, basename='flow')
 router.register(r'steps', views.FlowStepViewSet, basename='step')
 router.register(r'transitions', views.FlowTransitionViewSet, basename='transition')
-router.register(r'sessions', views.FlowSessionViewSet, basename='session')
+router.register(r'sessions', views.ContactFlowStateViewSet, basename='session')
 router.register(r'whatsapp-flows', views.WhatsAppFlowViewSet, basename='whatsapp-flow')
 router.register(r'whatsapp-responses', views.WhatsAppFlowResponseViewSet, basename='whatsapp-response')
 

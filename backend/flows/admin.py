@@ -2,7 +2,7 @@
 Admin configuration for flows app
 """
 from django.contrib import admin
-from .models import Flow, FlowStep, FlowTransition, FlowSession, WhatsAppFlow, WhatsAppFlowResponse
+from .models import Flow, FlowStep, FlowTransition, ContactFlowState, WhatsAppFlow, WhatsAppFlowResponse
 
 
 class FlowStepInline(admin.TabularInline):
@@ -79,8 +79,8 @@ class FlowTransitionAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(FlowSession)
-class FlowSessionAdmin(admin.ModelAdmin):
+@admin.register(ContactFlowState)
+class ContactFlowStateAdmin(admin.ModelAdmin):
     list_display = ['contact', 'flow', 'current_step', 'status', 'started_at']
     list_filter = ['status', 'flow', 'started_at']
     search_fields = ['contact__whatsapp_id', 'contact__name', 'flow__name']

@@ -207,14 +207,17 @@ class FlowTransition(models.Model):
         verbose_name_plural = 'Flow Transitions'
 
 
-class FlowSession(models.Model):
+class ContactFlowState(models.Model):
     """
     Tracks an active conversational flow session for a contact.
+    
+    Renamed from FlowSession to better reflect that this tracks the contact's
+    state within a flow rather than a separate session entity.
     """
     contact = models.ForeignKey(
         'conversations.Contact',
         on_delete=models.CASCADE,
-        related_name='flow_sessions'
+        related_name='contact_flow_states'
     )
     flow = models.ForeignKey(Flow, on_delete=models.CASCADE)
     current_step = models.ForeignKey(
