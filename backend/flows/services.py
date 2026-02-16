@@ -1,23 +1,36 @@
 """
 Flow processing services for flows app.
 
-Following conventions from morebnyemba/hanna and morebnyemba/whatsappcrm.
-Handles flow execution, step processing, and transition evaluation.
+Functional, loop-based flow engine following conventions from morebnyemba/hanna.
+Returns action lists instead of sending messages inline.
+
+Key differences from the old FlowProcessor class:
+- Functional instead of class-based
+- Loop-based instead of recursive (prevents stack overflow)
+- Returns action lists instead of sending messages inline (testable, transaction-safe)
+- Uses Jinja2 for template resolution instead of fragile JSON string replacement
+- Proper fallback handling with retry counts
+- Internal message type system for flow continuation
+- Query prefetching for transitions (avoids N+1)
+- Proper wait_for_whatsapp_response step handling
 """
 import logging
 import re
 import ast
+import json
 import operator
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
+
 from django.utils import timezone
-from django.db import transaction
+from django.db import models, transaction
 
 from .models import Flow, FlowStep, FlowTransition, FlowSession
-from conversations.models import Contact, Message
+from .utils import render_string_with_context, resolve_value
+from conversations.models import Contact
 
 logger = logging.getLogger(__name__)
 
-# Safe operators for condition evaluation
+# Safe operators for AST-based condition evaluation
 SAFE_OPERATORS = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
@@ -39,795 +52,1215 @@ SAFE_OPERATORS = {
 }
 
 
-class FlowProcessor:
-    """
-    Core flow processing engine.
-    Executes flow steps, evaluates transitions, and manages flow sessions.
-    """
+# ---------------------------------------------------------------------------
+# Helper: Action builders
+# ---------------------------------------------------------------------------
 
-    def __init__(self, session: FlowSession):
-        """
-        Initialize processor with a flow session.
+def _create_send_action(phone_number: str, message_config: dict) -> dict:
+    """Create a send message action dict."""
+    return {
+        'type': 'send_whatsapp_message',
+        'recipient': phone_number,
+        'message_config': message_config,
+    }
 
-        Args:
-            session: FlowSession instance
-        """
-        self.session = session
-        self.flow = session.flow
-        self.contact = session.contact
 
-    @classmethod
-    def start_flow(cls, flow: Flow, contact: Contact) -> 'FlowProcessor':
-        """
-        Start a new flow session for a contact.
+def _create_typing_action(phone_number: str) -> dict:
+    """Create a typing indicator action."""
+    return {
+        'type': 'send_typing_indicator',
+        'recipient': phone_number,
+    }
 
-        Args:
-            flow: Flow to start
-            contact: Contact to start the flow for
 
-        Returns:
-            FlowProcessor: Initialized processor with new session
-        """
-        # Check for existing active session with row lock
-        existing_session = FlowSession.objects.select_for_update().filter(
-            contact=contact,
-            status='active'
-        ).first()
+# ---------------------------------------------------------------------------
+# Helper: Flow state management
+# ---------------------------------------------------------------------------
 
-        if existing_session:
-            logger.warning(f"Contact {contact.phone_number} already has an active flow session")
-            # End the existing session
-            existing_session.status = 'abandoned'
-            existing_session.completed_at = timezone.now()
-            existing_session.save()
+def _clear_flow_state(contact: 'Contact', error: bool = False):
+    """End all active flow sessions for a contact."""
+    status = 'error' if error else 'completed'
+    FlowSession.objects.filter(
+        contact=contact, status='active'
+    ).update(
+        status=status,
+        completed_at=timezone.now()
+    )
+    logger.info(f"Cleared flow state for contact {contact.phone_number} (status={status})")
 
-        # Find entry point
-        entry_step = flow.steps.filter(is_entry_point=True).first()
-        if not entry_step:
-            logger.error(f"Flow {flow.name} has no entry point")
-            raise ValueError(f"Flow {flow.name} has no entry point")
 
-        # Create new session
-        session = FlowSession.objects.create(
-            contact=contact,
-            flow=flow,
-            current_step=entry_step,
-            status='active',
-            context_data={}
-        )
+def _create_human_handover_actions(contact: 'Contact', message_text: str) -> List[dict]:
+    """Create actions for handing over to a human agent."""
+    actions = [
+        _create_typing_action(contact.phone_number),
+        _create_send_action(contact.phone_number, {
+            'message_type': 'text',
+            'text': {'body': message_text}
+        }),
+    ]
+    _clear_flow_state(contact)
+    return actions
 
-        logger.info(f"Started flow {flow.name} for contact {contact.phone_number}")
 
-        # Create processor and execute entry step
-        processor = cls(session)
-        processor.execute_current_step()
-        return processor
+# ---------------------------------------------------------------------------
+# AST-based condition evaluation
+# ---------------------------------------------------------------------------
 
-    def execute_current_step(self):
-        """
-        Execute the current step of the flow.
-        """
-        if not self.session.current_step:
-            logger.warning(f"No current step for session {self.session.id}")
-            return
-
-        step = self.session.current_step
-        logger.info(f"Executing step: {step.name} ({step.step_type})")
-
-        # Execute based on step type
-        if step.step_type == 'send_message':
-            self._execute_send_message(step)
-        elif step.step_type == 'question':
-            self._execute_question(step)
-        elif step.step_type == 'condition':
-            self._execute_condition(step)
-        elif step.step_type == 'action':
-            self._execute_action(step)
-        elif step.step_type == 'wait_for_reply':
-            self._execute_wait_for_reply(step)
-        elif step.step_type == 'end_flow':
-            self._execute_end_flow(step)
-        elif step.step_type == 'human_handover':
-            self._execute_human_handover(step)
-        elif step.step_type == 'switch_flow':
-            self._execute_switch_flow(step)
-        else:
-            logger.warning(f"Unknown step type: {step.step_type}")
-
-    def _execute_send_message(self, step: FlowStep):
-        """
-        Execute a send_message step.
-
-        Config structure:
-        {
-            "message_type": "text",
-            "text": {"body": "Hello!"}
-        }
-        """
-        from meta_integration.utils import send_whatsapp_message, send_typing_indicator
-
-        message_config = step.config
-        phone_number = self.contact.phone_number
-
-        try:
-            # Replace variables in message with context data
-            message_config = self._replace_variables(message_config)
-
-            # Send typing indicator for a more natural experience
-            try:
-                send_typing_indicator(phone_number)
-            except Exception as e:
-                # Don't fail the whole message if typing indicator fails
-                logger.warning(f"Failed to send typing indicator: {str(e)}")
-
-            # Send message (interactive messages pass config directly like other types)
-            result = send_whatsapp_message(phone_number, message_config)
-            logger.info(f"Message sent in step {step.name}: {result}")
-
-            # Move to next step automatically
-            self._transition_to_next_step()
-        except Exception as e:
-            logger.error(f"Error sending message in step {step.name}: {str(e)}")
-            self._handle_error(str(e))
-
-    def _execute_question(self, step: FlowStep):
-        """
-        Execute a question step (sends message and waits for reply).
-
-        Config structure:
-        {
-            "message_config": {
-                "message_type": "text",
-                "text": {"body": "What is your monthly bill?"}
-            },
-            "reply_config": {
-                "expected_type": "number",
-                "validation": {"min": 0, "max": 100000},
-                "context_variable": "monthly_bill"
-            }
-        }
-        """
-        from meta_integration.utils import send_whatsapp_message, send_typing_indicator
-
-        message_config = step.config.get("message_config", {})
-        phone_number = self.contact.phone_number
-
-        try:
-            # Replace variables
-            message_config = self._replace_variables(message_config)
-
-            # Send typing indicator for a more natural experience
-            try:
-                send_typing_indicator(phone_number)
-            except Exception as e:
-                # Don't fail the whole message if typing indicator fails
-                logger.warning(f"Failed to send typing indicator: {str(e)}")
-
-            # Send question
-            result = send_whatsapp_message(phone_number, message_config)
-            logger.info(f"Question sent in step {step.name}: {result}")
-
-            # Wait for user reply (don't auto-transition)
-            # Reply will be processed in process_user_reply()
-        except Exception as e:
-            logger.error(f"Error sending question in step {step.name}: {str(e)}")
-            self._handle_error(str(e))
-
-    def _execute_condition(self, step: FlowStep):
-        """
-        Execute a conditional branch step.
-
-        Config structure:
-        {
-            "condition": "context_data.monthly_bill > 100"
-        }
-        """
-        condition = step.config.get("condition", "")
-
-        try:
-            # Evaluate condition
-            result = self._evaluate_condition(condition)
-            logger.info(f"Condition {condition} evaluated to {result}")
-
-            # Transition based on result
-            self._transition_to_next_step(condition_result=result)
-        except Exception as e:
-            logger.error(f"Error evaluating condition in step {step.name}: {str(e)}")
-            self._handle_error(str(e))
-
-    def _execute_action(self, step: FlowStep):
-        """
-        Execute an action step (e.g., create order, send email).
-
-        Config structure:
-        {
-            "action_type": "create_order",
-            "parameters": {...}
-        }
-        """
-        action_type = step.config.get("action_type")
-        parameters = step.config.get("parameters", {})
-
-        logger.info(f"Executing action: {action_type}")
-
-        try:
-            # Execute action based on type
-            if action_type == "create_order":
-                self._action_create_order(parameters)
-            elif action_type == "send_email":
-                self._action_send_email(parameters)
-            elif action_type == "update_context":
-                self._action_update_context(parameters)
-            elif action_type == "check_whatsapp_flow":
-                self._action_check_whatsapp_flow(parameters)
-            elif action_type == "send_whatsapp_flow":
-                self._action_send_whatsapp_flow(step, parameters)
+def _eval_ast_node(node, context: dict):
+    """Safely evaluate an AST node against flow context."""
+    if isinstance(node, ast.Constant):
+        return node.value
+    elif isinstance(node, ast.Name):
+        return context.get(node.id, None)
+    elif isinstance(node, ast.BinOp):
+        left = _eval_ast_node(node.left, context)
+        right = _eval_ast_node(node.right, context)
+        op_type = type(node.op)
+        if op_type in SAFE_OPERATORS:
+            return SAFE_OPERATORS[op_type](left, right)
+        raise ValueError(f"Unsupported operator: {op_type}")
+    elif isinstance(node, ast.UnaryOp):
+        operand = _eval_ast_node(node.operand, context)
+        op_type = type(node.op)
+        if op_type in SAFE_OPERATORS:
+            return SAFE_OPERATORS[op_type](operand)
+        raise ValueError(f"Unsupported unary operator: {op_type}")
+    elif isinstance(node, ast.Compare):
+        left = _eval_ast_node(node.left, context)
+        for op, comparator in zip(node.ops, node.comparators):
+            right = _eval_ast_node(comparator, context)
+            op_type = type(op)
+            if op_type in SAFE_OPERATORS:
+                if not SAFE_OPERATORS[op_type](left, right):
+                    return False
+                left = right
             else:
-                # Try the action registry for custom actions
-                from .actions import flow_action_registry
-                action_func = flow_action_registry.get(action_type)
-                if action_func:
-                    self.session.context_data = action_func(
-                        self.contact, self.session.context_data, parameters
-                    )
-                    self.session.save()
-                else:
-                    logger.warning(f"Unknown action type: {action_type}")
+                raise ValueError(f"Unsupported comparison: {op_type}")
+        return True
+    elif isinstance(node, ast.BoolOp):
+        if isinstance(node.op, ast.And):
+            return all(_eval_ast_node(v, context) for v in node.values)
+        elif isinstance(node.op, ast.Or):
+            return any(_eval_ast_node(v, context) for v in node.values)
+        raise ValueError(f"Unsupported boolean op: {type(node.op)}")
+    elif isinstance(node, ast.List):
+        return [_eval_ast_node(elt, context) for elt in node.elts]
+    elif isinstance(node, ast.Tuple):
+        return tuple(_eval_ast_node(elt, context) for elt in node.elts)
+    else:
+        raise ValueError(f"Unsupported AST node: {type(node)}")
 
-            # Move to next step
-            self._transition_to_next_step()
-        except Exception as e:
-            logger.error(f"Error executing action in step {step.name}: {str(e)}")
-            self._handle_error(str(e))
 
-    def _execute_wait_for_reply(self, step: FlowStep):
-        """
-        Execute a wait_for_reply step (pauses flow until user responds).
-        """
-        logger.info(f"Waiting for user reply at step {step.name}")
-        # Flow pauses here until process_user_reply() is called
-
-    def _execute_end_flow(self, step: FlowStep):
-        """
-        Execute an end_flow step (completes the flow session).
-        """
-        logger.info(f"Ending flow {self.flow.name} for contact {self.contact.phone_number}")
-
-        self.session.status = 'completed'
-        self.session.completed_at = timezone.now()
-        self.session.current_step = None
-        self.session.save()
-
-    def _execute_human_handover(self, step: FlowStep):
-        """
-        Execute a human_handover step (transfers to human agent).
-
-        Config structure:
-        {
-            "message": "Connecting you to an agent...",
-            "team": "sales"
-        }
-        """
-        from meta_integration.utils import send_text_message
-
-        message = step.config.get("message", "Connecting you to an agent...")
-
-        try:
-            # Send handover message
-            send_text_message(self.contact.phone_number, message)
-
-            # Mark session as requiring human intervention
-            self.session.status = 'completed'
-            self.session.completed_at = timezone.now()
-            self.session.save()
-
-            logger.info(f"Human handover initiated for contact {self.contact.phone_number}")
-        except Exception as e:
-            logger.error(f"Error in human handover: {str(e)}")
-            self._handle_error(str(e))
-
-    def _execute_switch_flow(self, step: FlowStep):
-        """
-        Execute a switch_flow step (switches to another flow).
-
-        Config structure:
-        {
-            "target_flow": "installation_scheduling"
-        }
-        """
-        target_flow_name = step.config.get("target_flow")
-
-        try:
-            target_flow = Flow.objects.get(name=target_flow_name, is_active=True)
-
-            # End current session
-            self.session.status = 'completed'
-            self.session.completed_at = timezone.now()
-            self.session.save()
-
-            # Start new flow
-            FlowProcessor.start_flow(target_flow, self.contact)
-            logger.info(f"Switched to flow {target_flow_name}")
-        except Flow.DoesNotExist:
-            logger.error(f"Target flow {target_flow_name} not found")
-            self._handle_error(f"Flow {target_flow_name} not found")
-
-    @transaction.atomic
-    def process_user_reply(self, reply_text: str):
-        """
-        Process a user reply within the current flow.
-
-        Args:
-            reply_text: User's message text
-        """
-        # Reload session with lock to prevent race conditions
-        self.session = FlowSession.objects.select_for_update().get(pk=self.session.pk)
-        
-        if not self.session.current_step:
-            logger.warning(f"No current step for session {self.session.id}")
-            return
-
-        step = self.session.current_step
-        
-        # Store the last reply in context for transition evaluation
-        self.session.context_data['_last_user_reply'] = reply_text
-        self.session.save()
-
-        # Handle based on step type
-        if step.step_type == 'question':
-            self._process_question_reply(step, reply_text)
-        elif step.step_type == 'wait_for_reply':
-            self._process_wait_reply(step, reply_text)
-        else:
-            logger.warning(f"Unexpected reply at step type {step.step_type}")
-
-    def _process_question_reply(self, step: FlowStep, reply_text: str):
-        """
-        Process reply to a question step.
-        """
-        reply_config = step.config.get("reply_config", {})
-        context_variable = reply_config.get("context_variable")
-        expected_type = reply_config.get("expected_type", "text")
-
-        # Validate and parse reply
-        try:
-            parsed_value = self._parse_reply(reply_text, expected_type, reply_config.get("validation", {}))
-
-            # Store in context
-            if context_variable:
-                self.session.context_data[context_variable] = parsed_value
-                self.session.save()
-                logger.info(f"Stored {context_variable} = {parsed_value}")
-
-            # Move to next step
-            self._transition_to_next_step()
-        except ValueError as e:
-            # Invalid input, ask again or handle error
-            logger.warning(f"Invalid reply: {str(e)}")
-            from meta_integration.utils import send_text_message
-            send_text_message(
-                self.contact.phone_number,
-                f"Invalid input: {str(e)}. Please try again."
-            )
-
-    def _process_wait_reply(self, step: FlowStep, reply_text: str):
-        """
-        Process reply during wait_for_reply step.
-        """
-        # Store reply in context
-        self.session.context_data['last_reply'] = reply_text
-        self.session.save()
-
-        # Move to next step
-        self._transition_to_next_step()
-
-    def _transition_to_next_step(self, condition_result: Optional[bool] = None):
-        """
-        Transition to the next step based on transitions.
-
-        Args:
-            condition_result: Result of condition evaluation (for conditional steps)
-        """
-        current_step = self.session.current_step
-        if not current_step:
-            return
-
-        # Get outgoing transitions ordered by priority
-        transitions = current_step.outgoing_transitions.order_by('priority')
-
-        # Find matching transition
-        next_step = None
-        for transition in transitions:
-            if self._evaluate_transition(transition, condition_result):
-                next_step = transition.next_step
-                break
-
-        if next_step:
-            self.session.current_step = next_step
-            self.session.save()
-            logger.info(f"Transitioned to step: {next_step.name}")
-
-            # Execute the next step
-            self.execute_current_step()
-        else:
-            logger.warning(f"No valid transition found from step {current_step.name}")
-            # End flow if no valid transition
-            self._execute_end_flow(current_step)
-
-    def _evaluate_transition(self, transition: FlowTransition, condition_result: Optional[bool]) -> bool:
-        """
-        Evaluate if a transition should be taken.
-
-        Args:
-            transition: FlowTransition to evaluate
-            condition_result: Result of previous condition evaluation
-
-        Returns:
-            bool: True if transition should be taken
-        """
-        condition_config = transition.condition_config
-
-        if not condition_config:
-            # Auto transition
-            return True
-
-        condition_type = condition_config.get("type", "auto")
-
-        if condition_type == "auto":
-            return True
-        elif condition_type == "always_true":
-            return True
-        elif condition_type == "condition_true" and condition_result is True:
-            return True
-        elif condition_type == "condition_false" and condition_result is False:
-            return True
-        elif condition_type == "user_reply_matches":
-            # Check if user reply matches pattern
-            return self._check_user_reply_matches(condition_config)
-        elif condition_type == "context_variable_equals":
-            # Check if a context variable equals a specific value
-            var_name = condition_config.get("variable")
-            expected_value = condition_config.get("value")
-            actual_value = self.session.context_data.get(var_name)
-            return actual_value == expected_value
-        elif condition_type == "variable_exists":
-            var_name = condition_config.get("variable_name")
-            return var_name is not None and var_name in self.session.context_data
-        elif condition_type == "whatsapp_flow_response_received":
-            return self.session.context_data.get("whatsapp_flow_response_received") is True
-        elif condition_type == "interactive_reply_id_equals":
-            expected_value = condition_config.get("value")
-            last_reply = self.session.context_data.get("_last_user_reply", "")
-            return last_reply == expected_value
-        elif condition_type == "expression":
-            expr = condition_config.get("expression")
-            if expr:
-                return self._evaluate_condition(expr)
-            return False
-        else:
-            return False
-    
-    def _check_user_reply_matches(self, condition_config: Dict[str, Any]) -> bool:
-        """
-        Check if the last user reply matches the specified pattern.
-        
-        Args:
-            condition_config: Condition configuration with pattern/keywords
-            
-        Returns:
-            bool: True if reply matches
-        """
-        last_reply = self.session.context_data.get('_last_user_reply', '')
-        if not last_reply:
-            return False
-        
-        last_reply_lower = last_reply.lower().strip()
-        
-        # Check pattern match (regex)
-        pattern = condition_config.get("pattern")
-        if pattern:
-            try:
-                if re.search(pattern, last_reply, re.IGNORECASE):
-                    return True
-            except re.error as e:
-                logger.error(f"Invalid regex pattern '{pattern}': {e}")
-                return False
-        
-        # Check keyword match (exact or contains)
-        keywords = condition_config.get("keywords", [])
-        if keywords:
-            match_type = condition_config.get("match_type", "contains")  # "exact" or "contains"
-            if match_type == "exact":
-                return last_reply_lower in [k.lower() for k in keywords]
-            else:  # contains
-                return any(k.lower() in last_reply_lower for k in keywords)
-        
+def _evaluate_expression(expression: str, context: dict) -> bool:
+    """Safely evaluate a condition expression using AST."""
+    try:
+        tree = ast.parse(expression, mode='eval')
+        return bool(_eval_ast_node(tree.body, context))
+    except SyntaxError as e:
+        logger.error(f"Invalid expression syntax '{expression}': {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Error evaluating expression '{expression}': {e}")
         return False
 
-    def _replace_variables(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Replace variables in config with context data.
 
-        Variables format: {{variable_name}} or {{nested.key}}
-        """
-        import json
+def _parse_reply(reply_text: str, expected_type: str, validation: dict = None):
+    """Parse and validate user reply. Raises ValueError on invalid input."""
+    validation = validation or {}
 
-        config_str = json.dumps(config)
-
-        # Find all variables (supports nested keys like {{user.name}})
-        variables = re.findall(r'\{\{([\w\.]+)\}\}', config_str)
-
-        for var in variables:
-            # Support nested key access
-            value = self._get_nested_value(var)
-            
-            # Escape special JSON characters in value
-            if isinstance(value, str):
-                # Escape quotes and backslashes for JSON safety
-                value = value.replace('\\', '\\\\').replace('"', '\\"')
-            
-            config_str = config_str.replace(f'{{{{{var}}}}}', str(value))
-
-        return json.loads(config_str)
-    
-    def _get_nested_value(self, key_path: str) -> Any:
-        """
-        Get a value from context data supporting nested keys.
-        
-        Args:
-            key_path: Key path like "user.name" or "monthly_bill"
-            
-        Returns:
-            Value from context or empty string if not found
-        """
-        keys = key_path.split('.')
-        value = self.session.context_data
-        
+    if expected_type == 'number':
         try:
-            for key in keys:
-                if isinstance(value, dict):
-                    value = value.get(key, '')
-                else:
-                    return ''
-            return value if value is not None else ''
-        except (KeyError, AttributeError, TypeError):
-            return ''
+            value = float(reply_text)
+            if 'min' in validation and value < validation['min']:
+                raise ValueError(f"Value must be at least {validation['min']}")
+            if 'max' in validation and value > validation['max']:
+                raise ValueError(f"Value must be at most {validation['max']}")
+            return value
+        except ValueError as e:
+            if 'Value must be' in str(e):
+                raise
+            raise ValueError("Please enter a valid number")
+    elif expected_type == 'email':
+        if not re.match(r'^[\w\.\+\-]+@[\w\.-]+\.\w+$', reply_text):
+            raise ValueError("Please enter a valid email address")
+        return reply_text
+    else:
+        return reply_text
 
-    def _parse_reply(self, reply_text: str, expected_type: str, validation: Dict[str, Any]):
-        """
-        Parse and validate user reply.
 
-        Args:
-            reply_text: User's reply
-            expected_type: Expected type (text, number, email, etc.)
-            validation: Validation rules
+# ---------------------------------------------------------------------------
+# Step execution - returns (actions, updated_context) without side effects
+# ---------------------------------------------------------------------------
 
-        Returns:
-            Parsed value
+def _execute_step_actions(
+    step: FlowStep,
+    contact: 'Contact',
+    flow_context: dict,
+    suppress_prompt: bool = False
+) -> Tuple[List[dict], dict]:
+    """
+    Execute a step's actions. Returns (action_list, updated_context).
+    Does NOT send messages or modify DB - caller handles that.
+    """
+    actions = []
+    context = flow_context.copy()
+    config = step.config or {}
+    phone = contact.phone_number
 
-        Raises:
-            ValueError: If validation fails
-        """
-        if expected_type == "number":
-            try:
-                value = float(reply_text)
-                if "min" in validation and value < validation["min"]:
-                    raise ValueError(f"Value must be at least {validation['min']}")
-                if "max" in validation and value > validation["max"]:
-                    raise ValueError(f"Value must be at most {validation['max']}")
-                return value
-            except ValueError as e:
-                if "Value must be" in str(e):
-                    raise
-                raise ValueError("Please enter a valid number")
-        elif expected_type == "email":
-            import re
-            if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', reply_text):
-                raise ValueError("Please enter a valid email address")
-            return reply_text
-        elif expected_type == "location":
-            # Store location data as-is
-            return reply_text
-        elif expected_type == "interactive_id":
-            # Store interactive button reply ID
-            return reply_text
-        else:
-            # Text type or other
-            return reply_text
+    logger.debug(f"Executing step '{step.name}' (type={step.step_type}) for {phone}")
 
-    def _evaluate_condition(self, condition: str) -> bool:
-        """
-        Safely evaluate a condition expression using AST.
-
-        Args:
-            condition: Condition string (e.g., "monthly_bill > 100" or "monthly_bill > 100 and roof_type == 'tile'")
-
-        Returns:
-            bool: Evaluation result
-            
-        Supported operators:
-            - Comparisons: ==, !=, <, <=, >, >=
-            - Logical: and, or, not
-            - Membership: in, not in
-            - Arithmetic: +, -, *, /, %, **
-        """
+    if step.step_type == 'send_message':
         try:
-            # Parse condition to AST
-            tree = ast.parse(condition, mode='eval')
-            
-            # Evaluate the AST safely
-            result = self._eval_ast_node(tree.body)
-            
-            logger.info(f"Condition '{condition}' evaluated to {result}")
-            return bool(result)
-            
-        except SyntaxError as e:
-            logger.error(f"Invalid condition syntax '{condition}': {e}")
-            return False
+            resolved_config = resolve_value(config, context, contact)
+            actions.append(_create_typing_action(phone))
+            actions.append(_create_send_action(phone, resolved_config))
         except Exception as e:
-            logger.error(f"Error evaluating condition '{condition}': {str(e)}")
-            return False
-    
-    def _eval_ast_node(self, node):
-        """
-        Safely evaluate an AST node.
-        
-        This implementation only allows safe operations and prevents code execution.
-        """
-        if isinstance(node, ast.Constant):  # Python 3.8+
-            return node.value
-        elif isinstance(node, ast.Num):  # Fallback for older Python
-            return node.n
-        elif isinstance(node, ast.Str):  # Fallback for older Python
-            return node.s
-        elif isinstance(node, ast.Name):
-            # Look up variable in context data
-            return self.session.context_data.get(node.id, None)
-        elif isinstance(node, ast.BinOp):
-            # Binary operation (e.g., +, -, *, /)
-            left = self._eval_ast_node(node.left)
-            right = self._eval_ast_node(node.right)
-            op_type = type(node.op)
-            if op_type in SAFE_OPERATORS:
-                return SAFE_OPERATORS[op_type](left, right)
-            else:
-                raise ValueError(f"Unsupported operator: {op_type}")
-        elif isinstance(node, ast.UnaryOp):
-            # Unary operation (e.g., not, -)
-            operand = self._eval_ast_node(node.operand)
-            op_type = type(node.op)
-            if op_type in SAFE_OPERATORS:
-                return SAFE_OPERATORS[op_type](operand)
-            else:
-                raise ValueError(f"Unsupported unary operator: {op_type}")
-        elif isinstance(node, ast.Compare):
-            # Comparison (e.g., <, >, ==)
-            left = self._eval_ast_node(node.left)
-            for op, comparator in zip(node.ops, node.comparators):
-                right = self._eval_ast_node(comparator)
-                op_type = type(op)
-                if op_type in SAFE_OPERATORS:
-                    result = SAFE_OPERATORS[op_type](left, right)
-                    if not result:
-                        return False
-                    left = right  # Chain comparisons
-                else:
-                    raise ValueError(f"Unsupported comparison operator: {op_type}")
-            return True
-        elif isinstance(node, ast.BoolOp):
-            # Boolean operation (and, or)
-            op_type = type(node.op)
-            if op_type == ast.And:
-                return all(self._eval_ast_node(val) for val in node.values)
-            elif op_type == ast.Or:
-                return any(self._eval_ast_node(val) for val in node.values)
-            else:
-                raise ValueError(f"Unsupported boolean operator: {op_type}")
-        elif isinstance(node, ast.List):
-            # List literal
-            return [self._eval_ast_node(elt) for elt in node.elts]
-        elif isinstance(node, ast.Tuple):
-            # Tuple literal
-            return tuple(self._eval_ast_node(elt) for elt in node.elts)
-        else:
-            raise ValueError(f"Unsupported AST node type: {type(node)}")
+            logger.error(f"Error in send_message step '{step.name}': {e}")
 
-    def _action_create_order(self, parameters: Dict[str, Any]):
-        """Execute create_order action."""
-        logger.info(f"Creating order with parameters: {parameters}")
-        # Implementation would create an Order record
-
-    def _action_send_email(self, parameters: Dict[str, Any]):
-        """Execute send_email action."""
-        logger.info(f"Sending email with parameters: {parameters}")
-        # Implementation would send an email
-
-    def _action_update_context(self, parameters: Dict[str, Any]):
-        """Execute update_context action."""
-        self.session.context_data.update(parameters)
-        self.session.save()
-        logger.info(f"Updated context with: {parameters}")
-
-    def _action_check_whatsapp_flow(self, parameters: Dict[str, Any]):
-        """
-        Check if a published WhatsApp interactive flow exists.
-        Sets a context variable with flow data if found.
-        """
-        from .actions import check_whatsapp_flow
-        self.session.context_data = check_whatsapp_flow(
-            self.contact, self.session.context_data, parameters
-        )
-        self.session.save()
-
-    def _action_send_whatsapp_flow(self, step: FlowStep, parameters: Dict[str, Any]):
-        """
-        Send a WhatsApp interactive flow message to the user.
-        Uses flow data from context to construct the interactive flow message.
-        """
-        from meta_integration.utils import send_whatsapp_message, send_typing_indicator
-
-        flow_data_var = parameters.get('flow_data_variable', 'wa_flow_data')
-        flow_data = self.session.context_data.get(flow_data_var, {})
-        flow_id = flow_data.get('flow_id')
-
-        if not flow_id:
-            logger.error(f"No flow_id in context variable '{flow_data_var}'")
-            return
-
-        phone_number = self.contact.phone_number
-        cta_text = parameters.get('cta_text', 'Start Form')
-        body_text = parameters.get('body_text', 'Please complete the form below.')
-        screen = parameters.get('initial_screen', 'WELCOME')
-
+    elif step.step_type == 'question':
         try:
-            send_typing_indicator(phone_number)
+            message_config = config.get('message_config', {})
+            reply_config = config.get('reply_config', {})
+            if not suppress_prompt:
+                resolved_msg = resolve_value(message_config, context, contact)
+                actions.append(_create_typing_action(phone))
+                actions.append(_create_send_action(phone, resolved_msg))
+            # Set question expectation in context
+            if reply_config:
+                context['_question_awaiting_reply_for'] = {
+                    'variable_name': reply_config.get(
+                        'save_to_variable',
+                        reply_config.get('context_variable')
+                    ),
+                    'expected_type': reply_config.get('expected_type', 'text'),
+                    'validation_regex': reply_config.get('validation_regex'),
+                    'validation': reply_config.get('validation', {}),
+                    'original_step_id': step.id,
+                }
         except Exception as e:
-            logger.warning(f"Failed to send typing indicator: {str(e)}")
+            logger.error(f"Error in question step '{step.name}': {e}")
 
-        message_config = {
-            "message_type": "interactive",
-            "interactive": {
-                "type": "flow",
-                "body": {"text": body_text},
-                "action": {
-                    "name": "flow",
-                    "parameters": {
-                        "flow_message_version": "3",
-                        "flow_token": f"{self.contact.id}-{flow_data.get('name', 'flow')}-{timezone.now().timestamp()}",
-                        "flow_id": flow_id,
-                        "flow_cta": cta_text,
-                        "flow_action": "navigate",
-                        "flow_action_payload": {"screen": screen}
-                    }
+    elif step.step_type == 'action':
+        try:
+            from .actions import flow_action_registry
+
+            actions_to_run = config.get('actions_to_run', [])
+            # Also support legacy config where action_type is at top level
+            if not actions_to_run and config.get('action_type'):
+                actions_to_run = [{
+                    'action_type': config.get('action_type'),
+                    'parameters': config.get('parameters', {}),
+                }]
+
+            for action_item in actions_to_run:
+                action_type = action_item.get('action_type')
+                parameters = action_item.get(
+                    'parameters',
+                    action_item.get('params_template', {})
+                )
+                resolved_params = resolve_value(parameters, context, contact)
+
+                # Check registry first
+                action_func = flow_action_registry.get(action_type)
+                if action_func:
+                    context = action_func(contact, context, resolved_params)
+                elif action_type == 'update_context':
+                    context.update(resolved_params)
+                elif action_type == 'send_whatsapp_flow':
+                    wa_actions = _build_whatsapp_flow_actions(
+                        contact, context, resolved_params
+                    )
+                    actions.extend(wa_actions)
+                else:
+                    logger.warning(f"Unknown action type: {action_type}")
+        except Exception as e:
+            logger.error(
+                f"Error in action step '{step.name}': {e}", exc_info=True
+            )
+
+    elif step.step_type == 'end_flow':
+        try:
+            msg_config = config.get('message_config')
+            if msg_config and not suppress_prompt:
+                resolved = resolve_value(msg_config, context, contact)
+                actions.append(_create_send_action(phone, resolved))
+            actions.append({'type': '_internal_command_end_flow'})
+        except Exception as e:
+            logger.error(f"Error in end_flow step '{step.name}': {e}")
+            actions.append({'type': '_internal_command_end_flow'})
+
+    elif step.step_type == 'human_handover':
+        message = config.get('message', 'Connecting you with a team member...')
+        resolved_msg = resolve_value(message, context, contact)
+        actions.append(_create_typing_action(phone))
+        actions.append(_create_send_action(phone, {
+            'message_type': 'text',
+            'text': {'body': resolved_msg}
+        }))
+        actions.append({'type': '_internal_command_end_flow'})
+
+    elif step.step_type == 'switch_flow':
+        target_name = config.get('target_flow_name', config.get('target_flow'))
+        if target_name:
+            resolved_name = (
+                resolve_value(target_name, context, contact)
+                if isinstance(target_name, str) else target_name
+            )
+            initial_ctx = resolve_value(
+                config.get('initial_context_template', {}), context, contact
+            )
+            switch_msg = config.get('message')
+            if switch_msg and not suppress_prompt:
+                resolved = resolve_value(switch_msg, context, contact)
+                actions.append(_create_send_action(phone, {
+                    'message_type': 'text',
+                    'text': {'body': resolved}
+                }))
+            actions.append({
+                'type': '_internal_command_switch_flow',
+                'target_flow_name': resolved_name,
+                'initial_context': initial_ctx if isinstance(initial_ctx, dict) else {},
+            })
+        else:
+            logger.error(f"switch_flow step '{step.name}' has no target_flow_name")
+
+    elif step.step_type in ('condition', 'wait_for_reply', 'start_flow_node'):
+        logger.debug(f"Step type '{step.step_type}' for '{step.name}' - no direct actions")
+
+    else:
+        logger.warning(f"Unhandled step_type '{step.step_type}' for step '{step.name}'")
+
+    return actions, context
+
+
+def _build_whatsapp_flow_actions(
+    contact: 'Contact', context: dict, params: dict
+) -> List[dict]:
+    """Build WhatsApp interactive flow message actions."""
+    phone = contact.phone_number
+    flow_data_var = params.get(
+        'flow_data_variable', params.get('flow_variable', 'wa_flow_data')
+    )
+    flow_data = context.get(flow_data_var, {})
+    flow_id = flow_data.get('flow_id')
+
+    if not flow_id:
+        logger.error(f"No flow_id in context variable '{flow_data_var}'")
+        return []
+
+    cta_text = params.get('cta_text', 'Start Form')
+    body_text = params.get('body_text', 'Please complete the form below.')
+    screen = params.get('initial_screen', 'WELCOME')
+
+    flow_msg = {
+        'message_type': 'interactive',
+        'interactive': {
+            'type': 'flow',
+            'body': {'text': body_text},
+            'action': {
+                'name': 'flow',
+                'parameters': {
+                    'flow_message_version': '3',
+                    'flow_token': (
+                        f"{contact.id}-{flow_data.get('name', 'flow')}"
+                        f"-{timezone.now().timestamp()}"
+                    ),
+                    'flow_id': flow_id,
+                    'flow_cta': cta_text,
+                    'flow_action': 'navigate',
+                    'flow_action_payload': {'screen': screen},
                 }
             }
         }
+    }
+    return [
+        _create_typing_action(phone),
+        _create_send_action(phone, flow_msg),
+    ]
 
+
+# ---------------------------------------------------------------------------
+# Transition evaluation
+# ---------------------------------------------------------------------------
+
+def _evaluate_transition_condition(
+    transition: FlowTransition,
+    contact: 'Contact',
+    message_data: dict,
+    flow_context: dict,
+) -> bool:
+    """Evaluate whether a transition's condition is met."""
+    config = transition.condition_config
+    if not config:
+        return True  # No condition = auto transition
+
+    condition_type = config.get('type', 'auto')
+
+    # Extract message info
+    user_text = ''
+    interactive_reply_id = None
+
+    msg_type = message_data.get('type', '')
+    if msg_type == 'text':
+        user_text = message_data.get('text', {}).get('body', '').strip()
+    elif msg_type == 'interactive':
+        interactive_payload = message_data.get('interactive', {})
+        interactive_type = interactive_payload.get('type')
+        if interactive_type == 'button_reply':
+            interactive_reply_id = interactive_payload.get(
+                'button_reply', {}
+            ).get('id')
+        elif interactive_type == 'list_reply':
+            interactive_reply_id = interactive_payload.get(
+                'list_reply', {}
+            ).get('id')
+
+    # Fallback: use _last_user_reply from context
+    if not user_text:
+        user_text = str(flow_context.get('_last_user_reply', ''))
+
+    # --- Evaluate condition types ---
+
+    if condition_type in ('auto', 'always_true'):
+        return True
+
+    elif condition_type == 'condition_true':
+        condition_expr = config.get('condition')
+        if condition_expr:
+            return _evaluate_expression(condition_expr, flow_context)
+        return False
+
+    elif condition_type == 'condition_false':
+        condition_expr = config.get('condition')
+        if condition_expr:
+            return not _evaluate_expression(condition_expr, flow_context)
+        return False
+
+    elif condition_type == 'expression':
+        expr = config.get('expression')
+        return _evaluate_expression(expr, flow_context) if expr else False
+
+    elif condition_type == 'user_reply_matches':
+        return _check_user_reply_matches(config, flow_context)
+
+    elif condition_type == 'user_reply_matches_keyword':
+        keyword = str(config.get('keyword', '')).strip()
+        if not keyword:
+            return False
+        case_sensitive = config.get('case_sensitive', False)
+        if case_sensitive:
+            return keyword == user_text
+        return keyword.lower() == user_text.lower()
+
+    elif condition_type == 'interactive_reply_id_equals':
+        expected = config.get('value', config.get('reply_id'))
+        if interactive_reply_id and expected:
+            return str(interactive_reply_id) == str(expected)
+        # Also check _last_user_reply for button replies forwarded as text
+        return str(flow_context.get('_last_user_reply', '')) == str(expected)
+
+    elif condition_type == 'context_variable_equals':
+        var_name = config.get('variable', config.get('variable_name'))
+        expected_value = config.get('value')
+        actual_value = flow_context.get(var_name)
+        return actual_value == expected_value
+
+    elif condition_type == 'variable_exists':
+        var_name = config.get('variable_name')
+        return var_name is not None and var_name in flow_context
+
+    elif condition_type == 'whatsapp_flow_response_received':
+        return flow_context.get('whatsapp_flow_response_received') is True
+
+    elif condition_type == 'variable_equals':
+        var_name = config.get('variable_name')
+        if var_name is None:
+            return False
+        actual = flow_context.get(var_name)
+        expected = config.get('value')
+        if actual is not None and expected is not None:
+            try:
+                if isinstance(expected, (int, float)):
+                    return float(actual) == float(expected)
+            except (ValueError, TypeError):
+                pass
+        return (
+            str(actual) == str(expected) if actual is not None else False
+        )
+
+    elif condition_type == 'message_type_is':
+        return msg_type == str(config.get('value'))
+
+    elif condition_type == 'user_reply_matches_regex':
+        regex = config.get('regex')
+        if regex and user_text:
+            try:
+                return bool(re.match(regex, user_text))
+            except re.error as e:
+                logger.error(f"Invalid regex in transition {transition.id}: {e}")
+        return False
+
+    else:
+        logger.warning(
+            f"Unknown condition type '{condition_type}' in transition {transition.id}"
+        )
+        return False
+
+
+def _check_user_reply_matches(config: dict, flow_context: dict) -> bool:
+    """Check if last user reply matches pattern/keywords."""
+    last_reply = str(flow_context.get('_last_user_reply', '')).strip().lower()
+    if not last_reply:
+        return False
+
+    pattern = config.get('pattern')
+    if pattern:
         try:
-            result = send_whatsapp_message(phone_number, message_config)
-            logger.info(f"WhatsApp flow message sent in step {step.name}: {result}")
-        except Exception as e:
-            logger.error(f"Error sending WhatsApp flow message: {str(e)}")
+            if re.search(pattern, last_reply, re.IGNORECASE):
+                return True
+        except re.error:
+            return False
 
-    def _handle_error(self, error_message: str):
-        """
-        Handle flow execution error.
+    keywords = config.get('keywords', [])
+    if keywords:
+        match_type = config.get('match_type', 'contains')
+        kw_lower = [k.lower() for k in keywords]
+        if match_type == 'exact':
+            return last_reply in kw_lower
+        return any(k in last_reply for k in kw_lower)
 
-        Args:
-            error_message: Error description
-        """
-        logger.error(f"Flow error for session {self.session.id}: {error_message}")
+    return False
 
-        self.session.status = 'error'
-        self.session.context_data['error'] = error_message
-        self.session.save()
 
-        # Optionally notify user
-        try:
-            from meta_integration.utils import send_text_message
-            send_text_message(
-                self.contact.phone_number,
-                "Sorry, an error occurred. Please try again or contact support."
+# ---------------------------------------------------------------------------
+# Fallback handling
+# ---------------------------------------------------------------------------
+
+def _handle_fallback(
+    current_step: FlowStep,
+    contact: 'Contact',
+    flow_context: dict,
+    session: FlowSession,
+) -> Tuple[List[dict], dict]:
+    """
+    Handle when no transition condition matches.
+    Returns (actions, updated_context).
+    """
+    actions = []
+    context = flow_context.copy()
+    config = current_step.config or {}
+
+    fallback_cfg = config.get('fallback_config', {})
+    max_retries = fallback_cfg.get('max_retries', 2)
+    re_prompt_text = fallback_cfg.get('re_prompt_message_text')
+    action_after = fallback_cfg.get('action_after_retries', 'human_handover')
+
+    if current_step.step_type == 'question':
+        fallback_count = context.get('_fallback_count', 0)
+        fallback_count += 1
+        context['_fallback_count'] = fallback_count
+
+        if fallback_count <= max_retries:
+            prompt = re_prompt_text or "I didn't understand that. Please try again."
+            resolved = resolve_value(prompt, context, contact)
+            actions.append(_create_send_action(contact.phone_number, {
+                'message_type': 'text',
+                'text': {'body': resolved}
+            }))
+            logger.info(
+                f"Fallback re-prompt ({fallback_count}/{max_retries}) "
+                f"at step '{current_step.name}'"
             )
-        except:
-            pass
+        else:
+            logger.info(
+                f"Fallback retries exhausted at '{current_step.name}', "
+                f"action: {action_after}"
+            )
+            if action_after == 'end_flow':
+                actions.append(_create_send_action(contact.phone_number, {
+                    'message_type': 'text',
+                    'text': {'body': "I wasn't able to process your request. Please try again later."}
+                }))
+                actions.append({'type': '_internal_command_end_flow'})
+            else:
+                # Default: human handover
+                msg = "I'm having trouble understanding. Let me connect you with a team member."
+                actions.extend(_create_human_handover_actions(contact, msg))
+    else:
+        # Non-question dead end
+        logger.error(
+            f"Dead end at step '{current_step.name}' (type={current_step.step_type}). "
+            f"No valid transition. Initiating handover."
+        )
+        msg = "I've encountered a technical issue. Let me connect you with a team member."
+        actions.extend(_create_human_handover_actions(contact, msg))
+
+    return actions, context
+
+
+# ---------------------------------------------------------------------------
+# Flow triggering
+# ---------------------------------------------------------------------------
+
+def _trigger_new_flow(
+    contact: 'Contact', message_text: str
+) -> Optional[FlowSession]:
+    """
+    Try to trigger a new flow from message text.
+    Uses proper keyword matching (iterates keywords in Python, not __icontains).
+    Returns the new FlowSession if triggered, None otherwise.
+    """
+    if not message_text:
+        return None
+
+    text_lower = message_text.lower().strip()
+
+    active_flows = Flow.objects.filter(is_active=True).only(
+        'id', 'name', 'trigger_keywords'
+    )
+
+    matched_flow = None
+    for flow in active_flows:
+        keywords = flow.trigger_keywords or []
+        for keyword in keywords:
+            if isinstance(keyword, str) and keyword.lower() in text_lower:
+                matched_flow = flow
+                break
+        if matched_flow:
+            break
+
+    if not matched_flow:
+        return None
+
+    entry_step = FlowStep.objects.filter(
+        flow=matched_flow, is_entry_point=True
+    ).first()
+
+    if not entry_step:
+        logger.error(f"Flow '{matched_flow.name}' has no entry point")
+        return None
+
+    # End any existing active sessions
+    FlowSession.objects.filter(
+        contact=contact, status='active'
+    ).update(
+        status='abandoned',
+        completed_at=timezone.now()
+    )
+
+    session = FlowSession.objects.create(
+        contact=contact,
+        flow=matched_flow,
+        current_step=entry_step,
+        status='active',
+        context_data={}
+    )
+
+    logger.info(f"Triggered flow '{matched_flow.name}' for {contact.phone_number}")
+    return session
+
+
+# ---------------------------------------------------------------------------
+# Transition helper
+# ---------------------------------------------------------------------------
+
+def _transition_to_step(
+    session: FlowSession,
+    next_step: FlowStep,
+    flow_context: dict,
+    contact: 'Contact',
+) -> Tuple[List[dict], dict]:
+    """
+    Transition to a new step: update session, execute step actions.
+    Returns (actions, updated_context).
+    """
+    # Clear question-specific context from previous step
+    if session.current_step and session.current_step.step_type == 'question':
+        flow_context.pop('_question_awaiting_reply_for', None)
+        flow_context.pop('_fallback_count', None)
+
+    logger.info(
+        f"Transitioning from "
+        f"'{session.current_step.name if session.current_step else 'None'}' "
+        f"to '{next_step.name}'"
+    )
+
+    session.current_step = next_step
+    session.context_data = flow_context
+    session.save(update_fields=['current_step', 'context_data', 'updated_at'])
+
+    step_actions, updated_context = _execute_step_actions(
+        next_step, contact, flow_context.copy()
+    )
+    return step_actions, updated_context
+
+
+# ---------------------------------------------------------------------------
+# Internal command processor
+# ---------------------------------------------------------------------------
+
+def _process_internal_commands(
+    actions: List[dict],
+    contact: 'Contact',
+    session: FlowSession,
+    context: dict,
+) -> List[dict]:
+    """Process _internal_command_* actions and return only external actions."""
+    result = []
+    for action in actions:
+        action_type = action.get('type', '')
+        if action_type == '_internal_command_end_flow':
+            _clear_flow_state(contact)
+        elif action_type == '_internal_command_switch_flow':
+            _clear_flow_state(contact)
+            try:
+                target_flow = Flow.objects.get(
+                    name=action['target_flow_name'], is_active=True
+                )
+                entry = FlowStep.objects.filter(
+                    flow=target_flow, is_entry_point=True
+                ).first()
+                if entry:
+                    new_session = FlowSession.objects.create(
+                        contact=contact,
+                        flow=target_flow,
+                        current_step=entry,
+                        status='active',
+                        context_data=action.get('initial_context', {}),
+                    )
+                    entry_actions, ctx = _execute_step_actions(
+                        entry, contact, new_session.context_data.copy()
+                    )
+                    result.extend(
+                        a for a in entry_actions
+                        if not a.get('type', '').startswith('_internal_')
+                    )
+                    new_session.context_data = ctx
+                    new_session.save(update_fields=['context_data', 'updated_at'])
+            except Flow.DoesNotExist:
+                logger.error(
+                    f"Switch target flow '{action.get('target_flow_name')}' not found"
+                )
+        elif not action_type.startswith('_internal_'):
+            result.append(action)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Reply processing helper
+# ---------------------------------------------------------------------------
+
+def _process_question_reply(
+    message_data: dict,
+    flow_context: dict,
+    question_expectation: dict,
+) -> Tuple[bool, Any]:
+    """
+    Process a user's reply to a question step.
+    Returns (is_valid, parsed_value).
+    """
+    variable_name = question_expectation.get('variable_name')
+    expected_type = question_expectation.get('expected_type', 'text')
+    validation = question_expectation.get('validation', {})
+    validation_regex = question_expectation.get('validation_regex')
+
+    msg_type = message_data.get('type', '')
+
+    # Text-based replies
+    if msg_type == 'text':
+        user_text = message_data.get('text', {}).get('body', '').strip()
+        if not user_text:
+            return False, None
+
+        if expected_type == 'number':
+            try:
+                return True, _parse_reply(user_text, 'number', validation)
+            except ValueError:
+                return False, None
+        elif expected_type == 'email':
+            try:
+                return True, _parse_reply(user_text, 'email')
+            except ValueError:
+                return False, None
+        elif expected_type == 'interactive_id':
+            # Accept text as interactive_id for legacy compat
+            return True, user_text
+        else:
+            # text type
+            if validation_regex:
+                if re.match(validation_regex, user_text):
+                    return True, user_text
+                return False, None
+            return True, user_text
+
+    # Interactive replies
+    elif msg_type == 'interactive':
+        interactive = message_data.get('interactive', {})
+        itype = interactive.get('type')
+        if itype == 'button_reply':
+            return True, interactive.get('button_reply', {}).get('id')
+        elif itype == 'list_reply':
+            return True, interactive.get('list_reply', {}).get('id')
+        elif itype == 'nfm_reply':
+            nfm = interactive.get('nfm_reply', {})
+            resp_json = nfm.get('response_json')
+            if resp_json:
+                try:
+                    return True, json.loads(resp_json)
+                except json.JSONDecodeError:
+                    return True, nfm
+            return True, nfm
+
+    # Internal WhatsApp flow response
+    elif msg_type == 'internal_whatsapp_flow_response':
+        if expected_type == 'nfm_reply':
+            return True, flow_context.get('whatsapp_flow_data')
+        # The data was already merged into context by the response processor
+        return True, flow_context.get('whatsapp_flow_data')
+
+    # Location
+    elif msg_type == 'location':
+        return True, message_data.get('location')
+
+    # Image
+    elif msg_type == 'image':
+        img_id = message_data.get('image', {}).get('id')
+        if img_id:
+            return True, img_id
+
+    return False, None
+
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
+@transaction.atomic
+def process_message_for_flow(
+    contact: 'Contact', message_data: dict
+) -> List[Dict[str, Any]]:
+    """
+    Process a message within the flow system.
+
+    Args:
+        contact: The Contact sending the message
+        message_data: Structured message data, e.g.:
+            {'type': 'text', 'text': {'body': 'hello'}}
+            {'type': 'interactive', 'interactive': {'type': 'button_reply', ...}}
+            {'type': 'internal_flow_start'}
+            {'type': 'internal_whatsapp_flow_response'}
+
+    Returns:
+        List of action dicts to execute (send messages, typing indicators, etc.)
+    """
+    actions_to_perform = []
+
+    # Prefetch transitions for efficient querying
+    prefetch_query = models.Prefetch(
+        'outgoing_transitions',
+        queryset=FlowTransition.objects.select_related(
+            'next_step'
+        ).order_by('priority'),
+    )
+
+    # Get active session
+    session = (
+        FlowSession.objects
+        .select_related('flow', 'current_step')
+        .prefetch_related(
+            models.Prefetch(
+                'current_step__outgoing_transitions',
+                queryset=FlowTransition.objects.select_related(
+                    'next_step'
+                ).order_by('priority'),
+            )
+        )
+        .filter(contact=contact, status='active')
+        .first()
+    )
+
+    try:
+        if not session:
+            # No active flow - try to trigger one
+            msg_type = message_data.get('type', '')
+            text = ''
+            if msg_type == 'text':
+                text = message_data.get('text', {}).get('body', '')
+
+            session = _trigger_new_flow(contact, text)
+            if not session:
+                return []
+
+            # Re-fetch with prefetch
+            session = (
+                FlowSession.objects
+                .select_related('flow', 'current_step')
+                .prefetch_related(
+                    models.Prefetch(
+                        'current_step__outgoing_transitions',
+                        queryset=FlowTransition.objects.select_related(
+                            'next_step'
+                        ).order_by('priority'),
+                    )
+                )
+                .get(pk=session.pk)
+            )
+
+            # Execute entry step
+            entry_step = session.current_step
+            initial_context = session.context_data or {}
+            entry_actions, updated_context = _execute_step_actions(
+                entry_step, contact, initial_context.copy()
+            )
+            actions_to_perform.extend(entry_actions)
+
+            session.context_data = updated_context
+            session.save(update_fields=['context_data', 'updated_at'])
+
+            # If entry step needs user input, return now
+            if entry_step.step_type in ('question', 'end_flow', 'human_handover'):
+                actions_to_perform = _process_internal_commands(
+                    actions_to_perform, contact, session, updated_context
+                )
+                return actions_to_perform
+
+            # Fall through to main loop for action/send_message steps
+            message_data = {'type': 'internal_flow_start'}
+
+        # --- Main Processing Loop ---
+        max_iterations = 50
+        iteration = 0
+
+        while iteration < max_iterations:
+            iteration += 1
+
+            is_internal = message_data.get('type', '').startswith('internal_')
+
+            # Re-fetch session state each iteration
+            session = (
+                FlowSession.objects
+                .select_related('flow', 'current_step')
+                .prefetch_related(
+                    models.Prefetch(
+                        'current_step__outgoing_transitions',
+                        queryset=FlowTransition.objects.select_related(
+                            'next_step'
+                        ).order_by('priority'),
+                    )
+                )
+                .filter(contact=contact, status='active')
+                .first()
+            )
+
+            if not session:
+                logger.info(
+                    f"Flow state cleared for {contact.phone_number}, "
+                    f"exiting loop"
+                )
+                break
+
+            current_step = session.current_step
+            flow_context = session.context_data or {}
+
+            if not current_step:
+                logger.error(
+                    f"Session {session.id} has no current_step. Clearing state."
+                )
+                _clear_flow_state(contact, error=True)
+                break
+
+            logger.debug(
+                f"Loop #{iteration}: step='{current_step.name}' "
+                f"type={current_step.step_type} msg_type={message_data.get('type')}"
+            )
+
+            # --- Handle question step awaiting reply ---
+            if (current_step.step_type == 'question'
+                    and '_question_awaiting_reply_for' in flow_context):
+
+                # If internal (not user reply), break to wait
+                if (is_internal
+                        and message_data.get('type') != 'internal_whatsapp_flow_response'):
+                    logger.debug(
+                        f"Reached question '{current_step.name}' via internal. "
+                        f"Waiting for user reply."
+                    )
+                    break
+
+                # Process the user's reply
+                question_exp = flow_context['_question_awaiting_reply_for']
+                reply_valid, value_to_save = _process_question_reply(
+                    message_data, flow_context, question_exp
+                )
+
+                variable_name = question_exp.get('variable_name')
+
+                if reply_valid and variable_name:
+                    flow_context[variable_name] = value_to_save
+                    flow_context['_last_user_reply'] = (
+                        str(value_to_save) if value_to_save is not None else ''
+                    )
+                    flow_context.pop('_question_awaiting_reply_for', None)
+                    flow_context.pop('_fallback_count', None)
+                    logger.info(f"Saved reply '{variable_name}' = {value_to_save}")
+                elif not reply_valid:
+                    # Store raw text for transition evaluation
+                    if message_data.get('type') == 'text':
+                        flow_context['_last_user_reply'] = (
+                            message_data.get('text', {}).get('body', '')
+                        )
+                    logger.info(
+                        f"Reply not valid for expected_type="
+                        f"{question_exp.get('expected_type')}"
+                    )
+
+                session.context_data = flow_context
+                session.save(update_fields=['context_data', 'updated_at'])
+
+            # --- Handle wait_for_whatsapp_response action step ---
+            if (current_step.step_type == 'action'
+                    and (current_step.config or {}).get('wait_for') == 'whatsapp_flow_response'):
+                if (is_internal
+                        and message_data.get('type') != 'internal_whatsapp_flow_response'):
+                    logger.debug(
+                        f"At wait step '{current_step.name}'. "
+                        f"Pausing for WhatsApp flow response."
+                    )
+                    break
+
+            # --- Store last user reply for transition evaluation ---
+            if (not is_internal
+                    and message_data.get('type') == 'text'
+                    and '_last_user_reply' not in flow_context):
+                flow_context['_last_user_reply'] = (
+                    message_data.get('text', {}).get('body', '')
+                )
+                session.context_data = flow_context
+                session.save(update_fields=['context_data', 'updated_at'])
+
+            # --- Evaluate transitions ---
+            transitions = current_step.outgoing_transitions.all()
+
+            next_step = None
+            for transition in transitions:
+                try:
+                    if _evaluate_transition_condition(
+                        transition, contact, message_data, flow_context
+                    ):
+                        next_step = transition.next_step
+                        logger.info(
+                            f"Transition matched: '{current_step.name}' → "
+                            f"'{next_step.name}' "
+                            f"(condition={transition.condition_config.get('type', 'auto') if transition.condition_config else 'auto'})"
+                        )
+                        break
+                except Exception as e:
+                    logger.error(
+                        f"Error evaluating transition {transition.id}: {e}",
+                        exc_info=True,
+                    )
+                    continue
+
+            if next_step:
+                # Execute transition
+                step_actions, flow_context = _transition_to_step(
+                    session, next_step, flow_context, contact
+                )
+
+                # Separate internal commands from external actions
+                switch_action = next(
+                    (a for a in step_actions
+                     if a.get('type') == '_internal_command_switch_flow'),
+                    None,
+                )
+                end_action = next(
+                    (a for a in step_actions
+                     if a.get('type') == '_internal_command_end_flow'),
+                    None,
+                )
+
+                actions_to_perform.extend(
+                    a for a in step_actions
+                    if not a.get('type', '').startswith('_internal_')
+                )
+
+                if end_action:
+                    _clear_flow_state(contact)
+                    break
+
+                if switch_action:
+                    _clear_flow_state(contact)
+
+                    new_flow_name = switch_action.get('target_flow_name')
+                    initial_context = switch_action.get('initial_context', {})
+
+                    try:
+                        target_flow = Flow.objects.get(
+                            name=new_flow_name, is_active=True
+                        )
+                        entry_point = FlowStep.objects.filter(
+                            flow=target_flow, is_entry_point=True
+                        ).first()
+
+                        if not entry_point:
+                            raise ValueError(
+                                f"Flow '{new_flow_name}' has no entry point"
+                            )
+
+                        new_session = FlowSession.objects.create(
+                            contact=contact,
+                            flow=target_flow,
+                            current_step=entry_point,
+                            status='active',
+                            context_data=initial_context,
+                        )
+
+                        entry_actions, updated_ctx = _execute_step_actions(
+                            entry_point, contact, initial_context.copy()
+                        )
+                        actions_to_perform.extend(
+                            a for a in entry_actions
+                            if not a.get('type', '').startswith('_internal_')
+                        )
+
+                        new_session.context_data = updated_ctx
+                        new_session.save(
+                            update_fields=['context_data', 'updated_at']
+                        )
+
+                        session = new_session
+                        flow_context = updated_ctx
+
+                        if entry_point.step_type in (
+                            'question', 'end_flow', 'human_handover'
+                        ):
+                            break
+
+                        message_data = {'type': 'internal_flow_start'}
+                        continue
+
+                    except Flow.DoesNotExist:
+                        logger.error(
+                            f"Switch target flow '{new_flow_name}' not found"
+                        )
+                        actions_to_perform.append(
+                            _create_send_action(contact.phone_number, {
+                                'message_type': 'text',
+                                'text': {
+                                    'body': 'Sorry, an error occurred. Please try again.'
+                                }
+                            })
+                        )
+                        break
+                    except Exception as e:
+                        logger.error(
+                            f"Error switching to flow '{new_flow_name}': {e}",
+                            exc_info=True,
+                        )
+                        break
+
+                # Loop control: break if next step needs user input
+                if next_step.step_type in (
+                    'question', 'end_flow', 'human_handover'
+                ):
+                    break
+
+                # For fall-through steps, use internal message
+                if not is_internal:
+                    message_data = {'type': 'internal_fallthrough'}
+
+            else:
+                # No transition matched - engage fallback
+                logger.info(
+                    f"No transition matched from step '{current_step.name}'. "
+                    f"Engaging fallback."
+                )
+                fallback_actions, flow_context = _handle_fallback(
+                    current_step, contact, flow_context, session
+                )
+                actions_to_perform.extend(
+                    a for a in fallback_actions
+                    if not a.get('type', '').startswith('_internal_')
+                )
+
+                if any(
+                    a.get('type') == '_internal_command_end_flow'
+                    for a in fallback_actions
+                ):
+                    _clear_flow_state(contact)
+
+                session.context_data = flow_context
+                session.save(update_fields=['context_data', 'updated_at'])
+                break
+
+        if iteration >= max_iterations:
+            logger.error(
+                f"Max iterations ({max_iterations}) reached for "
+                f"{contact.phone_number}. Clearing state."
+            )
+            _clear_flow_state(contact, error=True)
+            actions_to_perform.append(
+                _create_send_action(contact.phone_number, {
+                    'message_type': 'text',
+                    'text': {
+                        'body': 'Sorry, something went wrong. Please try again.'
+                    }
+                })
+            )
+
+    except Exception as e:
+        logger.error(
+            f"Critical error in process_message_for_flow for "
+            f"{contact.phone_number}: {e}",
+            exc_info=True,
+        )
+        _clear_flow_state(contact, error=True)
+        actions_to_perform = [
+            _create_send_action(contact.phone_number, {
+                'message_type': 'text',
+                'text': {
+                    'body': (
+                        'I seem to be having technical difficulties. '
+                        'Please try again in a moment.'
+                    )
+                }
+            })
+        ]
+
+    return actions_to_perform
+
+
+# ---------------------------------------------------------------------------
+# Action executor - sends the actions returned by process_message_for_flow
+# ---------------------------------------------------------------------------
+
+def execute_actions(actions: List[Dict[str, Any]]):
+    """
+    Execute a list of actions (send messages, typing indicators, etc.).
+    Called by the task layer after process_message_for_flow returns.
+    """
+    from meta_integration.utils import send_whatsapp_message, send_typing_indicator
+
+    for action in actions:
+        action_type = action.get('type')
+        try:
+            if action_type == 'send_whatsapp_message':
+                recipient = action.get('recipient')
+                msg_config = action.get('message_config')
+                if recipient and msg_config:
+                    send_whatsapp_message(recipient, msg_config)
+            elif action_type == 'send_typing_indicator':
+                recipient = action.get('recipient')
+                if recipient:
+                    try:
+                        send_typing_indicator(recipient)
+                    except Exception as e:
+                        logger.warning(f"Typing indicator failed: {e}")
+            elif action_type and action_type.startswith('_internal_'):
+                pass  # Skip internal commands
+            else:
+                logger.warning(f"Unknown action type: {action_type}")
+        except Exception as e:
+            logger.error(
+                f"Error executing action {action_type}: {e}", exc_info=True
+            )

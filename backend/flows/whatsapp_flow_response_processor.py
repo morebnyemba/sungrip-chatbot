@@ -99,12 +99,14 @@ class WhatsAppFlowResponseProcessor:
             )
             
             # Trigger flow progression to process the response
-            from .services import FlowProcessor
-            processor = FlowProcessor(flow_session)
+            from .services import process_message_for_flow, execute_actions
             
-            # Create a synthetic message to trigger flow progression
-            # The flow will check the whatsapp_flow_response_received flag in context
-            processor.process_user_reply("__whatsapp_flow_response__")
+            # Use structured internal message type instead of synthetic text
+            internal_message = {'type': 'internal_whatsapp_flow_response'}
+            actions = process_message_for_flow(contact, internal_message)
+            
+            if actions:
+                execute_actions(actions)
             
             logger.info(f"Triggered flow progression for session {flow_session.id}")
             

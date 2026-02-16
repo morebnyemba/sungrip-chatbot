@@ -97,6 +97,17 @@ class ReplyConfig(BaseModel):
     save_to_variable: str
     expected_type: Literal['text', 'email', 'number', 'interactive_id', 'image', 'location', 'nfm_reply'] = 'text'
     validation_regex: Optional[str] = None
+    validation: Optional[Dict[str, Any]] = None
+
+
+class FallbackConfig(BaseModel):
+    """Configuration for what happens when a user's reply is invalid."""
+    model_config = ConfigDict(extra='allow')
+
+    max_retries: int = Field(2, ge=0)
+    re_prompt_message_text: Optional[str] = None
+    action_after_retries: Optional[Literal['human_handover', 'end_flow', 'switch_flow']] = 'human_handover'
+    config_after_retries: Optional[Dict[str, Any]] = None
 
 class StepConfigQuestion(BaseModel):
     """Configuration for question step - WhatsApp format only."""
@@ -380,10 +391,7 @@ def validate_transition_config(transition_config: Dict[str, Any]) -> Dict[str, A
 
 
 def validate_context_data(context: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate flow session context data."""
-    try:
-        schema = FlowSessionContext(**context)
-        return schema.model_dump(exclude_unset=True)
-    except Exception as e:
-        logger.error(f"Context data validation failed: {str(e)}")
-        raise ValueError(f"Invalid context data: {str(e)}")
+    """Validate flow session context data (permissive — allows extra keys)."""
+    if not isinstance(context, dict):
+        raise ValueError("Context data must be a dictionary")
+    return context

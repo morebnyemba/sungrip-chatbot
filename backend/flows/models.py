@@ -246,16 +246,9 @@ class FlowSession(models.Model):
     def __str__(self) -> str:
         return f"{self.contact} - {self.flow.name} ({self.status})"
     
-    def clean(self) -> None:
-        super().clean()
-        # Validate context data using Pydantic schema
-        try:
-            self.context_data = schemas.validate_context_data(self.context_data)
-        except ValueError as e:
-            raise ValidationError({'context_data': _(str(e))})
-    
     def save(self, *args, **kwargs) -> None:
-        self.full_clean()
+        if not isinstance(self.context_data, dict):
+            self.context_data = {}
         super().save(*args, **kwargs)
 
     class Meta:

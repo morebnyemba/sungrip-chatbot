@@ -15,7 +15,13 @@ import json
 from .models import Flow, FlowStep, FlowTransition, FlowSession, WhatsAppFlow, WhatsAppFlowResponse
 from conversations.models import Contact
 from meta_integration.models import MetaAppConfig
-from .services import FlowProcessor
+from .services import (
+    process_message_for_flow,
+    execute_actions,
+    _evaluate_expression,
+    _check_user_reply_matches,
+)
+from .utils import resolve_value
 from . import schemas
 
 
@@ -237,7 +243,7 @@ class SchemaValidationTests(TestCase):
 # ============================================================================
 
 class FlowProcessorTests(TransactionTestCase):
-    """Tests for FlowProcessor service."""
+    """Tests for flow processing service."""
 
     def setUp(self):
         self.contact = Contact.objects.create(
@@ -246,7 +252,8 @@ class FlowProcessorTests(TransactionTestCase):
         )
         self.flow = Flow.objects.create(
             name='solar_quote',
-            is_active=True
+            is_active=True,
+            trigger_keywords=['solar', 'quote']
         )
 
         # Create steps
@@ -254,7 +261,10 @@ class FlowProcessorTests(TransactionTestCase):
             flow=self.flow,
             name='welcome',
             step_type='send_message',
-            config={'message': 'Welcome to Solar Quote!'},
+            config={
+                'message_type': 'text',
+                'text': {'body': 'Welcome to Solar Quote!'}
+            },
             is_entry_point=True
         )
 
@@ -263,9 +273,14 @@ class FlowProcessorTests(TransactionTestCase):
             name='ask_roof_type',
             step_type='question',
             config={
-                'question_text': 'What type of roof do you have?',
-                'input_type': 'options',
-                'options': ['tile', 'asphalt', 'metal']
+                'message_config': {
+                    'message_type': 'text',
+                    'text': {'body': 'What type of roof do you have?'}
+                },
+                'reply_config': {
+                    'save_to_variable': 'roof_type',
+                    'expected_type': 'text',
+                }
             }
         )
 
@@ -274,8 +289,14 @@ class FlowProcessorTests(TransactionTestCase):
             name='ask_bill',
             step_type='question',
             config={
-                'question_text': 'What is your monthly electricity bill?',
-                'input_type': 'text'
+                'message_config': {
+                    'message_type': 'text',
+                    'text': {'body': 'What is your monthly electricity bill?'}
+                },
+                'reply_config': {
+                    'save_to_variable': 'monthly_bill',
+                    'expected_type': 'number',
+                }
             }
         )
 
@@ -292,47 +313,35 @@ class FlowProcessorTests(TransactionTestCase):
             condition_config={'type': 'auto'}
         )
 
-    def test_start_flow(self):
-        """Test starting a flow."""
-        processor = FlowProcessor.start_flow(self.contact, self.flow)
-        
-        self.assertIsNotNone(processor.session)
-        self.assertEqual(processor.session.contact, self.contact)
-        self.assertEqual(processor.session.flow, self.flow)
-        self.assertEqual(processor.session.current_step, self.step1)
-        self.assertEqual(processor.session.status, 'active')
+    def test_trigger_flow_via_keyword(self):
+        """Test triggering a flow by keyword returns actions."""
+        message_data = {'type': 'text', 'text': {'body': 'solar'}}
+        actions = process_message_for_flow(self.contact, message_data)
+
+        # Should have created a session
+        session = FlowSession.objects.filter(
+            contact=self.contact, status='active'
+        ).first()
+        self.assertIsNotNone(session)
+        self.assertEqual(session.flow, self.flow)
+
+        # Should return actions (at least the welcome message)
+        self.assertTrue(len(actions) > 0)
 
     def test_condition_evaluation(self):
         """Test condition evaluation with context data."""
-        session = FlowSession.objects.create(
-            contact=self.contact,
-            flow=self.flow,
-            current_step=self.step2,
-            context_data={'monthly_bill': 150}
-        )
-        processor = FlowProcessor(session)
+        context = {'monthly_bill': 150}
 
-        # Test simple comparison
-        result = processor._evaluate_condition('monthly_bill > 100')
-        self.assertTrue(result)
-
-        # Test false condition
-        result = processor._evaluate_condition('monthly_bill < 100')
-        self.assertFalse(result)
+        self.assertTrue(_evaluate_expression('monthly_bill > 100', context))
+        self.assertFalse(_evaluate_expression('monthly_bill < 100', context))
 
     def test_variable_replacement(self):
-        """Test context variable replacement in configs."""
-        session = FlowSession.objects.create(
-            contact=self.contact,
-            flow=self.flow,
-            context_data={'user_name': 'John', 'roof_type': 'tile'}
-        )
-        processor = FlowProcessor(session)
-
+        """Test Jinja2 variable replacement in configs."""
+        context = {'user_name': 'John', 'roof_type': 'tile'}
         config = {
             'message': 'Hello {{user_name}}, your roof type is {{roof_type}}'
         }
-        result = processor._replace_variables(config)
+        result = resolve_value(config, context)
         self.assertEqual(
             result['message'],
             'Hello John, your roof type is tile'
@@ -340,22 +349,16 @@ class FlowProcessorTests(TransactionTestCase):
 
     def test_user_reply_matching(self):
         """Test user reply matching in transitions."""
-        session = FlowSession.objects.create(
-            contact=self.contact,
-            flow=self.flow,
-            current_step=self.step2,
-            context_data={'_last_user_reply': 'yes, please'}
-        )
-        processor = FlowProcessor(session)
+        flow_context = {'_last_user_reply': 'yes, please'}
 
         # Test keyword match
         condition_config = {'pattern': r'yes|ok'}
-        result = processor._check_user_reply_matches(condition_config)
+        result = _check_user_reply_matches(condition_config, flow_context)
         self.assertTrue(result)
 
         # Test non-match
         condition_config = {'pattern': r'no|never'}
-        result = processor._check_user_reply_matches(condition_config)
+        result = _check_user_reply_matches(condition_config, flow_context)
         self.assertFalse(result)
 
 
@@ -436,7 +439,8 @@ class FlowIntegrationTests(TransactionTestCase):
         # Create a simple 3-step flow
         self.flow = Flow.objects.create(
             name='simple_flow',
-            is_active=True
+            is_active=True,
+            trigger_keywords=['start', 'begin']
         )
 
         self.step1 = FlowStep.objects.create(
@@ -474,21 +478,18 @@ class FlowIntegrationTests(TransactionTestCase):
         )
 
     def test_complete_flow_execution(self):
-        """Test executing a complete flow from start to end."""
-        # Start the flow
-        processor = FlowProcessor.start_flow(self.contact, self.flow)
-        
-        # Verify we're at step 1
-        self.assertEqual(processor.session.current_step, self.step1)
+        """Test executing a complete flow via process_message_for_flow."""
+        # Trigger the flow by keyword
+        message_data = {'type': 'text', 'text': {'body': 'start'}}
+        actions = process_message_for_flow(self.contact, message_data)
 
-        # Move to step 2
-        processor.execute_current_step()
-        # In real scenario, would call move_to_next_step() after user reply
-        # processor.move_to_next_step()
-        
-        # Session should still be active
-        processor.session.refresh_from_db()
-        self.assertEqual(processor.session.status, 'active')
+        # Verify session was created and is active
+        session = FlowSession.objects.filter(
+            contact=self.contact, status='active'
+        ).first()
+        self.assertIsNotNone(session)
+        self.assertEqual(session.flow, self.flow)
+        self.assertEqual(session.status, 'active')
 
 
 # ============================================================================

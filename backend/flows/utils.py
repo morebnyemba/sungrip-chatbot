@@ -46,3 +46,22 @@ def render_string_with_context(template_string: str, context: dict) -> str:
     except Exception as e:
         logger.error(f"Jinja2 template rendering failed: {e}. Template: '{template_string}'", exc_info=False)
         return template_string
+
+
+def resolve_value(value, context: dict, contact=None):
+    """
+    Recursively resolve Jinja2 template strings in any structure.
+
+    Supports:
+    - Strings with {{var}} or Jinja2 syntax
+    - Dicts (resolves values recursively)
+    - Lists (resolves items recursively)
+    - Other types pass through unchanged
+    """
+    if isinstance(value, str):
+        return render_string_with_context(value, context)
+    elif isinstance(value, dict):
+        return {k: resolve_value(v, context, contact) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [resolve_value(item, context, contact) for item in value]
+    return value

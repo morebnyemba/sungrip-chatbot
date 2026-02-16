@@ -209,37 +209,71 @@ def _trigger_flow_processing(contact, message, content: str):
     """
     Trigger flow processing based on message content.
 
+    Uses the functional process_message_for_flow engine which:
+    - Handles both active sessions and new flow triggers internally
+    - Uses proper keyword matching (not __icontains on JSONField)
+    - Returns action lists instead of sending inline
+    - Uses loop-based execution instead of recursion
+
     Args:
         contact: Contact instance
         message: Message instance
         content: Message text content
     """
-    from flows.models import Flow, FlowSession
+    from flows.services import process_message_for_flow, execute_actions
 
-    # Check if contact has an active flow session
-    active_session = FlowSession.objects.filter(
-        contact=contact,
-        status='active'
-    ).first()
+    # Build structured message_data from the raw content
+    # The message object's metadata contains the full webhook payload
+    message_data = _build_message_data(message, content)
 
-    if active_session:
-        # Process within existing flow
-        from flows.services import FlowProcessor
-        processor = FlowProcessor(active_session)
-        processor.process_user_reply(content)
+    # Process through the flow engine
+    actions = process_message_for_flow(contact, message_data)
+
+    # Execute the returned actions (send messages, etc.)
+    if actions:
+        execute_actions(actions)
+
+
+def _build_message_data(message, content: str) -> dict:
+    """
+    Build structured message_data dict from a Message instance.
+
+    Extracts the original message type and payload from the message
+    metadata when available, falling back to a simple text wrapper.
+
+    Args:
+        message: Message instance with metadata
+        content: Extracted text content
+
+    Returns:
+        Structured message_data dict
+    """
+    metadata = getattr(message, 'metadata', None) or {}
+
+    # If metadata has the original message type, reconstruct it
+    msg_type = metadata.get('type', 'text')
+
+    if msg_type == 'interactive':
+        interactive_data = metadata.get('interactive', {})
+        return {
+            'type': 'interactive',
+            'interactive': interactive_data,
+        }
+    elif msg_type == 'location':
+        return {
+            'type': 'location',
+            'location': metadata.get('location', {}),
+        }
+    elif msg_type == 'image':
+        return {
+            'type': 'image',
+            'image': metadata.get('image', {}),
+        }
     else:
-        # Check for flow triggers
-        content_lower = content.lower()
-        triggered_flow = Flow.objects.filter(
-            is_active=True,
-            trigger_keywords__icontains=content_lower
-        ).first()
-
-        if triggered_flow:
-            # Start new flow session
-            from flows.services import FlowProcessor
-            processor = FlowProcessor.start_flow(triggered_flow, contact)
-            logger.info(f"Started flow {triggered_flow.name} for contact {contact.phone_number}")
+        return {
+            'type': 'text',
+            'text': {'body': content},
+        }
 
 
 def _process_flow_response(webhook_log: WebhookEventLog, payload: Dict[str, Any]) -> Dict[str, Any]:
