@@ -260,6 +260,29 @@ docker compose exec backend python manage.py migrate
    docker compose exec db pg_dump -U sungrip_user sungrip_db > backup.sql
    ```
 
+## 🔄 Database Reset
+
+If you change database credentials (`DB_PASSWORD`, `DB_USER`, `DB_NAME`) in your `.env` file after the database has already been initialized, PostgreSQL will reject connections because the Docker volume still contains data from the old credentials.
+
+**To fix this, reset the database and its volumes:**
+
+```bash
+# Option 1: Use the reset script (recommended)
+chmod +x reset-db.sh
+./reset-db.sh
+
+# Option 2: Manual reset
+docker compose down -v          # Stop containers and remove all project volumes (db, redis, static, media)
+docker compose up -d            # Start fresh with new credentials
+docker compose exec backend python manage.py migrate
+docker compose exec backend python manage.py createsuperuser
+```
+
+> ⚠️ **Warning:** This will delete ALL data including conversations, customers, orders, etc. Back up your data first if needed:
+> ```bash
+> docker compose exec db pg_dump -U sungrip_user sungrip_db > backup.sql
+> ```
+
 ## 🤝 Contributing
 
 1. Fork the repository

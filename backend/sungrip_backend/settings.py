@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 from datetime import timedelta
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -112,6 +113,10 @@ if 'test' in sys.argv:
             'NAME': ':memory:',
         }
     }
+elif os.environ.get('DATABASE_URL'):
+    DATABASES = {
+        'default': dj_database_url.config(),
+    }
 else:
     DATABASES = {
         'default': {
@@ -119,7 +124,7 @@ else:
             'NAME': os.environ.get('DB_NAME', 'sungrip_db'),
             'USER': os.environ.get('DB_USER', 'sungrip_user'),
             'PASSWORD': os.environ.get('DB_PASSWORD', 'sungrip_password'),
-            'HOST': os.environ.get('DB_HOST', 'db'),
+            'HOST': os.environ.get('DB_HOST', 'localhost'),
             'PORT': os.environ.get('DB_PORT', '5432'),
         }
     }
