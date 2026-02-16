@@ -24,15 +24,14 @@ RUN pip install --upgrade pip && \
 # Copy project
 COPY . .
 
-# Copy and set entrypoint permissions
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Set entrypoint permissions
+RUN chmod +x /app/entrypoint.sh
 
 # Expose port
 EXPOSE 8000
 
 # Set entrypoint
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Default command
 CMD ["web"]
