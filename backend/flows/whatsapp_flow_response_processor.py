@@ -98,21 +98,13 @@ class WhatsAppFlowResponseProcessor:
                 f"Current step: {flow_session.current_step.name if flow_session.current_step else 'None'}"
             )
             
-            # Trigger flow progression to process the response
-            from .services import process_message_for_flow, execute_actions
-            
-            # Use structured internal message type instead of synthetic text
-            internal_message = {'type': 'internal_whatsapp_flow_response'}
-            actions = process_message_for_flow(contact, internal_message)
-            
-            if actions:
-                execute_actions(actions)
-            
-            logger.info(f"Triggered flow progression for session {flow_session.id}")
+            # Note: Flow continuation will be triggered asynchronously by the calling code
+            # via process_flow_continuation_task to ensure reliable transaction handling.
+            # This matches hanna's pattern where the processor only updates context.
             
             return {
                 "success": True, 
-                "notes": f"Flow session {flow_session.id} updated with WhatsApp flow data and progressed."
+                "notes": f"Flow session {flow_session.id} updated with WhatsApp flow data."
             }
             
         except Exception as e:

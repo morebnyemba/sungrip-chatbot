@@ -1,17 +1,20 @@
 """
 Celery tasks for meta_integration app.
 
-Following conventions from morebnyemba/hanna and morebnyemba/whatsappcrm.
-Handles asynchronous webhook processing and message sending.
+Aligned with morebnyemba/hanna's meta_integration/tasks.py.
+Contains outbound message tasks (send_whatsapp_message_task, send_read_receipt_task)
+plus the webhook processing pipeline.
 """
 import logging
 from celery import shared_task
 from django.utils import timezone
+from django.db.models import Q
+from datetime import timedelta
 from typing import Dict, Any
 
 from .models import MetaAppConfig, WebhookEventLog
 from .services import WhatsAppAPIService, WebhookProcessor
-from .utils import extract_message_from_webhook, extract_status_from_webhook
+from .utils import extract_message_from_webhook, extract_status_from_webhook, send_whatsapp_message
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +85,11 @@ def _process_incoming_message(webhook_log: WebhookEventLog, payload: Dict[str, A
     """
     Process an incoming message from webhook payload.
 
+    Following hanna's pattern:
+    1. Creates Contact, Conversation, and Message records (with content_payload)
+    2. Sends read receipt + typing via Celery task
+    3. Queues the dedicated flow processing task
+
     Args:
         webhook_log: WebhookEventLog instance
         payload: Webhook payload dict
@@ -89,49 +97,61 @@ def _process_incoming_message(webhook_log: WebhookEventLog, payload: Dict[str, A
     Returns:
         dict: Processing result
     """
-    from conversations.models import Contact, Message
+    from conversations.models import Contact, Message, Conversation
 
     message_data = extract_message_from_webhook(payload)
     if not message_data:
         return {"status": "error", "message": "No message data in payload"}
 
     from_number = message_data.get("from")
-    message_id = message_data.get("id")
+    wamid = message_data.get("id")
     message_type = message_data.get("type", "text")
-    timestamp = message_data.get("timestamp")
 
-    # Get or create contact
+    # Get or create contact (use whatsapp_id as unique key, matching hanna)
     contact, created = Contact.objects.get_or_create(
-        phone_number=from_number,
+        whatsapp_id=from_number,
         defaults={
-            "name": message_data.get("profile", {}).get("name", from_number)
+            "phone_number": from_number,
+            "profile_name": message_data.get("profile", {}).get("name", from_number),
         }
     )
 
-    # Extract message content based on type
-    content = ""
-    if message_type == "text":
-        content = message_data.get("text", {}).get("body", "")
-    elif message_type == "image":
-        content = f"[Image: {message_data.get('image', {}).get('id', '')}]"
-    elif message_type == "document":
-        content = f"[Document: {message_data.get('document', {}).get('filename', '')}]"
-    elif message_type == "audio":
-        content = "[Audio message]"
-    elif message_type == "video":
-        content = "[Video message]"
-    else:
-        content = f"[{message_type} message]"
+    # Extract text preview
+    content = _extract_content_text(message_data, message_type)
 
-    # Create message record
+    # Get or create a conversation for this contact
+    conversation = Conversation.objects.filter(
+        contact=contact, status='active'
+    ).first()
+    if not conversation:
+        conversation = Conversation.objects.create(
+            contact=contact,
+            title=f"Chat with {contact.profile_name or contact.phone_number}",
+            status='active',
+        )
+
+    # Get active config from webhook log
+    config = getattr(webhook_log, 'app_config', None)
+
+    # Create message record with content_payload (matches hanna)
     message = Message.objects.create(
+        conversation=conversation,
         contact=contact,
+        message_id=wamid,
         direction="inbound",
         message_type=message_type,
         content=content,
-        whatsapp_message_id=message_id,
+        content_payload=message_data,
+        app_config=config,
+        interactive_data=message_data.get('interactive') if message_type == 'interactive' else None,
+        media_id=message_data.get(message_type, {}).get('id', '') if message_type in ('image', 'video', 'audio', 'document') else '',
+        location_latitude=message_data.get('location', {}).get('latitude') if message_type == 'location' else None,
+        location_longitude=message_data.get('location', {}).get('longitude') if message_type == 'location' else None,
+        location_name=message_data.get('location', {}).get('name', '') if message_type == 'location' else '',
+        location_address=message_data.get('location', {}).get('address', '') if message_type == 'location' else '',
+        timestamp=timezone.now(),
         status="received",
-        metadata=message_data
+        status_timestamp=timezone.now(),
     )
 
     # Link message to webhook log
@@ -140,21 +160,16 @@ def _process_incoming_message(webhook_log: WebhookEventLog, payload: Dict[str, A
 
     logger.info(f"Created message {message.id} from contact {contact.phone_number}")
 
-    # Mark message as read and send typing indicator (reference repo pattern)
-    try:
-        service = WhatsAppAPIService()
-        service.mark_message_as_read(message_id)
-        logger.info(f"Marked message {message_id} as read")
+    # Send read receipt + typing indicator via Celery task (matches hanna)
+    if config and wamid:
+        send_read_receipt_task.delay(
+            wamid=wamid,
+            config_id=config.id,
+            show_typing_indicator=True,
+        )
 
-        # Send typing indicator after marking as read
-        service.send_typing_indicator(from_number)
-        logger.info(f"Sent typing indicator to {from_number}")
-    except Exception as e:
-        # Don't fail message processing if read receipt or typing fails
-        logger.warning(f"Failed to mark as read or send typing: {str(e)}")
-
-    # Trigger flow processing (if applicable)
-    _trigger_flow_processing(contact, message, content)
+    # Queue the dedicated flow processing task (matches hanna pattern)
+    _trigger_flow_processing(message)
 
     return {
         "status": "success",
@@ -162,6 +177,24 @@ def _process_incoming_message(webhook_log: WebhookEventLog, payload: Dict[str, A
         "contact_id": contact.id,
         "notes": f"Message processed from {from_number}"
     }
+
+
+def _extract_content_text(message_data: dict, message_type: str) -> str:
+    """Extract a text preview from message data for the content field."""
+    if message_type == "text":
+        return message_data.get("text", {}).get("body", "")
+    elif message_type == "image":
+        return f"[Image: {message_data.get('image', {}).get('id', '')}]"
+    elif message_type == "document":
+        return f"[Document: {message_data.get('document', {}).get('filename', '')}]"
+    elif message_type == "audio":
+        return "[Audio message]"
+    elif message_type == "video":
+        return "[Video message]"
+    elif message_type == "interactive":
+        return "[Interactive message]"
+    else:
+        return f"[{message_type} message]"
 
 
 def _process_message_status(webhook_log: WebhookEventLog, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -181,104 +214,56 @@ def _process_message_status(webhook_log: WebhookEventLog, payload: Dict[str, Any
     if not status_data:
         return {"status": "error", "message": "No status data in payload"}
 
-    message_id = status_data.get("id")
-    status = status_data.get("status")  # sent, delivered, read, failed
+    wamid = status_data.get("id")
+    new_status = status_data.get("status")  # sent, delivered, read, failed
 
-    # Update message status
+    # Update message status (use message_id field — matches hanna's wamid lookup)
     try:
-        message = Message.objects.get(whatsapp_message_id=message_id)
-        message.status = status
-        message.save()
+        message = Message.objects.get(message_id=wamid)
+        message.status = new_status
+        message.status_timestamp = timezone.now()
+        message.save(update_fields=['status', 'status_timestamp'])
 
-        logger.info(f"Updated message {message.id} status to {status}")
+        logger.info(f"Updated message {message.id} status to {new_status}")
         return {
             "status": "success",
             "message_id": message.id,
-            "new_status": status,
-            "notes": f"Status updated to {status}"
+            "new_status": new_status,
+            "notes": f"Status updated to {new_status}"
         }
     except Message.DoesNotExist:
-        logger.warning(f"Message with whatsapp_message_id {message_id} not found")
+        logger.warning(f"Message with WAMID {wamid} not found for status update")
         return {
             "status": "ignored",
-            "message": f"Message {message_id} not found in database"
+            "message": f"Message {wamid} not found in database"
         }
 
 
-def _trigger_flow_processing(contact, message, content: str):
+def _trigger_flow_processing(message):
     """
-    Trigger flow processing based on message content.
+    Queue flow processing via the dedicated Celery task.
 
-    Uses the functional process_message_for_flow engine which:
-    - Handles both active sessions and new flow triggers internally
-    - Uses proper keyword matching (not __icontains on JSONField)
-    - Returns action lists instead of sending inline
-    - Uses loop-based execution instead of recursion
+    Matches hanna's pattern: the webhook handler creates a Message, then
+    queues process_flow_for_message_task to run the flow engine asynchronously.
 
     Args:
-        contact: Contact instance
-        message: Message instance
-        content: Message text content
+        message: Message instance (must be saved with a valid ID)
     """
-    from flows.services import process_message_for_flow, execute_actions
+    from flows.tasks import process_flow_for_message_task
 
-    # Build structured message_data from the raw content
-    # The message object's metadata contains the full webhook payload
-    message_data = _build_message_data(message, content)
-
-    # Process through the flow engine
-    actions = process_message_for_flow(contact, message_data)
-
-    # Execute the returned actions (send messages, etc.)
-    if actions:
-        execute_actions(actions)
-
-
-def _build_message_data(message, content: str) -> dict:
-    """
-    Build structured message_data dict from a Message instance.
-
-    Extracts the original message type and payload from the message
-    metadata when available, falling back to a simple text wrapper.
-
-    Args:
-        message: Message instance with metadata
-        content: Extracted text content
-
-    Returns:
-        Structured message_data dict
-    """
-    metadata = getattr(message, 'metadata', None) or {}
-
-    # If metadata has the original message type, reconstruct it
-    msg_type = metadata.get('type', 'text')
-
-    if msg_type == 'interactive':
-        interactive_data = metadata.get('interactive', {})
-        return {
-            'type': 'interactive',
-            'interactive': interactive_data,
-        }
-    elif msg_type == 'location':
-        return {
-            'type': 'location',
-            'location': metadata.get('location', {}),
-        }
-    elif msg_type == 'image':
-        return {
-            'type': 'image',
-            'image': metadata.get('image', {}),
-        }
-    else:
-        return {
-            'type': 'text',
-            'text': {'body': content},
-        }
+    process_flow_for_message_task.delay(message.id)
 
 
 def _process_flow_response(webhook_log: WebhookEventLog, payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     Process a WhatsApp Flow response from webhook payload.
+
+    Following hanna's pattern:
+    1. Extracts the nfm_reply message from the webhook payload
+    2. Gets/creates contact and conversation
+    3. Creates a Message record for the flow response (with content_payload)
+    4. Calls process_whatsapp_flow_response() from services (updates context)
+    5. Queues process_flow_for_message_task with the Message ID
 
     Args:
         webhook_log: WebhookEventLog instance
@@ -287,180 +272,281 @@ def _process_flow_response(webhook_log: WebhookEventLog, payload: Dict[str, Any]
     Returns:
         dict: Processing result
     """
-    from conversations.models import Contact
-    from flows.models import WhatsAppFlow
-    from flows.whatsapp_flow_response_processor import WhatsAppFlowResponseProcessor
+    from conversations.models import Contact, Message, Conversation
+    from flows.services import process_whatsapp_flow_response
+    from flows.tasks import process_flow_for_message_task
 
     try:
-        # Extract flow response data from webhook
-        # Meta sends flow responses in the 'messages' array with type 'interactive'
-        # and subtype 'nfm_reply' (New Flow Message reply)
+        # Extract flow response message from webhook payload
         messages = payload.get('entry', [{}])[0].get('changes', [{}])[0].get('value', {}).get('messages', [])
-        
+
         if not messages:
             return {"status": "error", "message": "No messages in flow response payload"}
-        
-        message = messages[0]
-        from_number = message.get('from')
-        message_type = message.get('type')
-        
+
+        msg_data = messages[0]
+        from_number = msg_data.get('from')
+        wamid = msg_data.get('id')
+        message_type = msg_data.get('type')
+
         if message_type != 'interactive':
             return {"status": "error", "message": f"Expected interactive message type, got {message_type}"}
-        
-        interactive_data = message.get('interactive', {})
-        interactive_type = interactive_data.get('type')
-        
-        if interactive_type != 'nfm_reply':
-            return {"status": "error", "message": f"Expected nfm_reply type, got {interactive_type}"}
-        
-        nfm_reply = interactive_data.get('nfm_reply', {})
-        flow_token = nfm_reply.get('response_json', '')
-        
-        # Parse the response JSON
-        import json
-        try:
-            response_data = json.loads(flow_token) if isinstance(flow_token, str) else flow_token
-        except json.JSONDecodeError:
-            response_data = nfm_reply
-        
-        # Get the flow ID from the webhook
-        flow_id = nfm_reply.get('name')  # The flow ID is in the 'name' field
-        
-        if not flow_id:
-            return {"status": "error", "message": "No flow ID in response"}
-        
+
+        interactive_data = msg_data.get('interactive', {})
+        if interactive_data.get('type') != 'nfm_reply':
+            return {"status": "error", "message": f"Expected nfm_reply type, got {interactive_data.get('type')}"}
+
         # Get or create contact
-        contact, created = Contact.objects.get_or_create(
-            phone_number=from_number,
+        contact, _ = Contact.objects.get_or_create(
+            whatsapp_id=from_number,
             defaults={
-                "name": from_number  # Will be updated if we have profile info
+                "phone_number": from_number,
+                "profile_name": from_number,
             }
         )
-        
-        # Find the WhatsAppFlow by flow_id
-        try:
-            whatsapp_flow = WhatsAppFlow.objects.get(flow_id=flow_id)
-        except WhatsAppFlow.DoesNotExist:
-            logger.error(f"WhatsAppFlow with flow_id {flow_id} not found")
-            return {
-                "status": "error",
-                "message": f"WhatsApp Flow {flow_id} not found in database"
-            }
-        
-        # Process the flow response
-        result = WhatsAppFlowResponseProcessor.process_response(
-            whatsapp_flow=whatsapp_flow,
-            contact=contact,
-            response_data=response_data
-        )
-        
-        if result and result.get('success'):
-            logger.info(
-                f"Successfully processed flow response from {from_number} "
-                f"for flow {whatsapp_flow.name}"
+
+        # Get or create conversation
+        conversation = Conversation.objects.filter(
+            contact=contact, status='active'
+        ).first()
+        if not conversation:
+            conversation = Conversation.objects.create(
+                contact=contact,
+                title=f"Chat with {contact.profile_name or contact.phone_number}",
+                status='active',
             )
+
+        config = getattr(webhook_log, 'app_config', None)
+
+        # Create Message record for the flow response (matches hanna)
+        message, _ = Message.objects.update_or_create(
+            message_id=wamid,
+            defaults={
+                'conversation': conversation,
+                'contact': contact,
+                'app_config': config,
+                'direction': 'inbound',
+                'message_type': 'interactive',
+                'content': '[WhatsApp Flow Response]',
+                'content_payload': msg_data,
+                'interactive_data': interactive_data,
+                'timestamp': timezone.now(),
+                'status': 'received',
+                'status_timestamp': timezone.now(),
+            }
+        )
+
+        # Link to webhook log
+        webhook_log.message = message
+        webhook_log.save()
+
+        # Process via services.py (updates context only, matches hanna pattern)
+        success, notes = process_whatsapp_flow_response(msg_data, contact, config)
+
+        if success:
+            # Queue flow task with the Message ID (matches hanna)
+            process_flow_for_message_task.delay(message.id)
+            logger.info(f"Queued flow processing for flow response message {message.id}")
             return {
                 "status": "success",
                 "contact_id": contact.id,
-                "whatsapp_flow_id": whatsapp_flow.id,
-                "notes": result.get('notes', 'Flow response processed')
+                "notes": f"{notes} Flow task queued.",
             }
         else:
-            error_msg = result.get('notes', 'Unknown error') if result else 'Processing failed'
-            logger.error(f"Failed to process flow response: {error_msg}")
-            return {
-                "status": "error",
-                "message": error_msg
-            }
-            
+            logger.error(f"Failed to process flow response: {notes}")
+            return {"status": "error", "message": notes}
+
     except Exception as e:
         logger.error(f"Error processing flow response: {str(e)}", exc_info=True)
-        return {
-            "status": "error",
-            "message": f"Exception: {str(e)}"
+        return {"status": "error", "message": f"Exception: {str(e)}"}
+
+
+# =============================================================================
+# Outbound Message Tasks (matches hanna's task architecture)
+# =============================================================================
+
+@shared_task(bind=True, max_retries=10, default_retry_delay=3)
+def send_whatsapp_message_task(self, outgoing_message_id: int, active_config_id: int):
+    """
+    Celery task to send a WhatsApp message asynchronously.
+    Updates the Message object's status based on the outcome.
+
+    Matches hanna's send_whatsapp_message_task:
+    - Takes Message ID + Config ID (not raw phone/content)
+    - Loads Message from DB, manages sequential delivery
+    - Calls send_whatsapp_message() utility
+    - Updates message status with WAMID from API response
+    - Retries with backoff on failure
+
+    Args:
+        outgoing_message_id: ID of the outgoing Message object to send
+        active_config_id: ID of the MetaAppConfig to use for sending
+    """
+    from conversations.models import Message
+
+    try:
+        outgoing_msg = Message.objects.select_related('contact').get(pk=outgoing_message_id)
+    except Message.DoesNotExist:
+        logger.error(f"send_whatsapp_message_task: Message {outgoing_message_id} not found.")
+        return
+
+    try:
+        active_config = MetaAppConfig.objects.get(pk=active_config_id)
+    except MetaAppConfig.DoesNotExist:
+        logger.error(f"send_whatsapp_message_task: Config {active_config_id} not found.")
+        outgoing_msg.status = 'failed'
+        outgoing_msg.error_message = f'MetaAppConfig ID {active_config_id} not found.'
+        outgoing_msg.status_timestamp = timezone.now()
+        outgoing_msg.save(update_fields=['status', 'error_message', 'status_timestamp'])
+        return
+
+    if outgoing_msg.direction != 'outbound':
+        logger.warning(f"Message {outgoing_message_id} is not outbound. Skipping.")
+        return
+
+    # Skip if already sent successfully
+    if outgoing_msg.message_id and outgoing_msg.status == 'sent':
+        logger.info(
+            f"Message {outgoing_message_id} already sent "
+            f"(WAMID: {outgoing_msg.message_id}). Skipping."
+        )
+        return
+    if outgoing_msg.status == 'failed' and self.request.retries >= self.max_retries:
+        logger.warning(f"Message {outgoing_message_id} already failed and max retries reached. Skipping.")
+        return
+
+    # --- Sequential delivery logic (matches hanna) ---
+    stale_threshold = timezone.now() - timedelta(seconds=20)
+    stale_pending_threshold = timezone.now() - timedelta(minutes=1)
+
+    halting_message = Message.objects.filter(
+        Q(contact=outgoing_msg.contact),
+        Q(direction='outbound'),
+        Q(id__lt=outgoing_msg.id),
+        (
+            Q(status='pending_dispatch', timestamp__gte=stale_pending_threshold) |
+            Q(status='sent', status_timestamp__gte=stale_threshold)
+        )
+    ).order_by('-id').first()
+
+    if halting_message:
+        logger.warning(
+            f"send_whatsapp_message_task: Halting message {outgoing_message_id} for contact "
+            f"{outgoing_msg.contact.whatsapp_id}. Waiting for preceding message "
+            f"{halting_message.id} (Status: {halting_message.status}). Retrying."
+        )
+        try:
+            raise self.retry()
+        except self.MaxRetriesExceededError:
+            logger.error(f"Max retries exceeded for message {outgoing_message_id} while waiting.")
+            outgoing_msg.status = 'failed'
+            outgoing_msg.error_code = 'max_retries_waiting'
+            outgoing_msg.error_message = 'Max retries exceeded while waiting for preceding message.'
+            outgoing_msg.status_timestamp = timezone.now()
+            outgoing_msg.save(update_fields=['status', 'error_code', 'error_message', 'status_timestamp'])
+            return
+
+    logger.info(
+        f"send_whatsapp_message_task started for Message {outgoing_message_id}, "
+        f"Contact: {outgoing_msg.contact.whatsapp_id}"
+    )
+
+    # --- Build message_config and send ---
+    try:
+        if not isinstance(outgoing_msg.content_payload, dict):
+            raise ValueError("Message content_payload is not a valid dictionary for sending.")
+
+        # Reconstruct message_config: {message_type: ..., <type>: data}
+        msg_config = {
+            'message_type': outgoing_msg.message_type,
+            outgoing_msg.message_type: outgoing_msg.content_payload,
         }
 
+        api_response = send_whatsapp_message(
+            phone_number=outgoing_msg.contact.whatsapp_id,
+            message_config=msg_config,
+            config=active_config,
+        )
 
-@shared_task
-def send_message_task(phone_number: str, message_config: Dict[str, Any], config_id: int = None):
+        if api_response and api_response.get('messages') and api_response['messages'][0].get('id'):
+            outgoing_msg.message_id = api_response['messages'][0]['id']
+            outgoing_msg.status = 'sent'
+            outgoing_msg.error_code = ''
+            outgoing_msg.error_message = ''
+            logger.info(
+                f"Message {outgoing_message_id} sent successfully. "
+                f"WAMID: {outgoing_msg.message_id}"
+            )
+        else:
+            error_info = api_response or {'error': 'Meta API returned unexpected response.'}
+            logger.error(f"Failed to send Message {outgoing_message_id}: {error_info}")
+            outgoing_msg.status = 'failed'
+            outgoing_msg.error_message = str(error_info)[:500]
+            raise ValueError("Meta API call failed.")
+
+    except Exception as e:
+        logger.error(
+            f"Exception in send_whatsapp_message_task for Message {outgoing_message_id}: {e}",
+            exc_info=True,
+        )
+        outgoing_msg.status = 'failed'
+        outgoing_msg.error_message = str(e)[:500]
+        try:
+            raise self.retry(exc=e)
+        except self.MaxRetriesExceededError:
+            logger.error(f"Max retries exceeded for sending Message {outgoing_message_id}.")
+            outgoing_msg.status_timestamp = timezone.now()
+            outgoing_msg.save(
+                update_fields=['message_id', 'status', 'error_code', 'error_message', 'status_timestamp']
+            )
+            return
+
+    # Save final state on success
+    outgoing_msg.status_timestamp = timezone.now()
+    outgoing_msg.save(
+        update_fields=['message_id', 'status', 'error_code', 'error_message', 'status_timestamp']
+    )
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=10)
+def send_read_receipt_task(self, wamid: str, config_id: int, show_typing_indicator: bool = False):
     """
-    Send a WhatsApp message asynchronously.
+    Celery task to send a read receipt for a given message ID.
+    Optionally sends a typing indicator.
+
+    Matches hanna's send_read_receipt_task pattern.
 
     Args:
-        phone_number: Recipient phone number in E.164 format
-        message_config: Message configuration dict
-        config_id: Optional MetaAppConfig ID. If None, uses active config.
-
-    Returns:
-        dict: API response
+        wamid: WhatsApp message ID to mark as read
+        config_id: MetaAppConfig ID
+        show_typing_indicator: Whether to also show typing indicator
     """
+    logger.info(f"send_read_receipt_task started for WAMID: {wamid} (Typing: {show_typing_indicator})")
+
     try:
-        config = None
-        if config_id:
-            config = MetaAppConfig.objects.get(id=config_id)
+        active_config = MetaAppConfig.objects.get(pk=config_id)
+    except MetaAppConfig.DoesNotExist:
+        logger.error(f"send_read_receipt_task: Config {config_id} not found.")
+        return
 
-        service = WhatsAppAPIService(config=config)
-        result = service.send_message(phone_number, message_config)
-
-        logger.info(f"Message sent to {phone_number} via task")
-        return result
-    except Exception as e:
-        logger.error(f"Error sending message to {phone_number}: {str(e)}", exc_info=True)
-        raise
-
-
-@shared_task
-def mark_message_as_read_task(message_id: str, config_id: int = None):
-    """
-    Mark a WhatsApp message as read asynchronously.
-
-    Args:
-        message_id: WhatsApp message ID (wamid)
-        config_id: Optional MetaAppConfig ID. If None, uses active config.
-
-    Returns:
-        dict: API response
-    """
     try:
-        config = None
-        if config_id:
-            config = MetaAppConfig.objects.get(id=config_id)
+        service = WhatsAppAPIService(config=active_config)
 
-        service = WhatsAppAPIService(config=config)
-        result = service.mark_message_as_read(message_id)
+        # Send read receipt
+        service.mark_message_as_read(wamid)
+        logger.info(f"Read receipt sent for WAMID {wamid}")
 
-        logger.info(f"Message {message_id} marked as read via task")
-        return result
+        # Optionally send typing indicator
+        if show_typing_indicator:
+            try:
+                from conversations.models import Message
+                msg = Message.objects.filter(message_id=wamid).select_related('contact').first()
+                if msg and msg.contact:
+                    service.send_typing_indicator(msg.contact.whatsapp_id)
+                    logger.info(f"Typing indicator sent for contact {msg.contact.whatsapp_id}")
+            except Exception as e:
+                logger.warning(f"Failed to send typing indicator for WAMID {wamid}: {e}")
+
     except Exception as e:
-        logger.error(f"Error marking message as read: {str(e)}", exc_info=True)
-        raise
+        logger.error(f"Error sending read receipt for WAMID {wamid}: {e}", exc_info=True)
+        raise self.retry(exc=e)
 
-
-@shared_task
-def send_typing_indicator_task(phone_number: str, config_id: int = None):
-    """
-    Send typing indicator asynchronously.
-
-    The typing indicator is displayed for approximately 10 seconds or until
-    a message is sent to the user, whichever comes first.
-
-    Args:
-        phone_number: Recipient phone number in E.164 format
-        config_id: Optional MetaAppConfig ID. If None, uses active config.
-
-    Returns:
-        dict: API response
-    """
-    try:
-        config = None
-        if config_id:
-            config = MetaAppConfig.objects.get(id=config_id)
-
-        service = WhatsAppAPIService(config=config)
-        result = service.send_typing_indicator(phone_number)
-
-        logger.info(f"Typing indicator sent to {phone_number} via task")
-        return result
-    except Exception as e:
-        logger.error(f"Error sending typing indicator: {str(e)}", exc_info=True)
-        raise

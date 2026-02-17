@@ -56,20 +56,28 @@ SAFE_OPERATORS = {
 # Helper: Action builders
 # ---------------------------------------------------------------------------
 
-def _create_send_action(phone_number: str, message_config: dict) -> dict:
-    """Create a send message action dict."""
+def _create_send_action(wa_id: str, message_config: dict) -> dict:
+    """Create a send message action dict (hanna-compatible format).
+
+    Takes a full message_config dict and extracts message_type + type-specific
+    data to produce the flat action format used by hanna's flow engine.
+    """
+    msg_type = message_config.get('message_type', 'text')
+    # Extract the type-specific payload (e.g., text.body, interactive data)
+    data = message_config.get(msg_type, message_config)
     return {
         'type': 'send_whatsapp_message',
-        'recipient': phone_number,
-        'message_config': message_config,
+        'recipient_wa_id': wa_id,
+        'message_type': msg_type,
+        'data': data,
     }
 
 
-def _create_typing_action(phone_number: str) -> dict:
+def _create_typing_action(wa_id: str) -> dict:
     """Create a typing indicator action."""
     return {
         'type': 'send_typing_indicator',
-        'recipient': phone_number,
+        'recipient_wa_id': wa_id,
     }
 
 
@@ -91,15 +99,14 @@ def _clear_flow_state(contact: 'Contact', error: bool = False):
 
 def _create_human_handover_actions(contact: 'Contact', message_text: str) -> List[dict]:
     """Create actions for handing over to a human agent."""
-    actions = [
+    return [
         _create_typing_action(contact.phone_number),
         _create_send_action(contact.phone_number, {
             'message_type': 'text',
             'text': {'body': message_text}
         }),
+        {'type': '_internal_command_end_flow'},
     ]
-    _clear_flow_state(contact)
-    return actions
 
 
 # ---------------------------------------------------------------------------
@@ -974,6 +981,19 @@ def process_message_for_flow(
                 f"type={current_step.step_type} msg_type={message_data.get('type')}"
             )
 
+            # --- CRITICAL: Early conversion of already-processed WhatsApp Flow responses ---
+            # If we receive an nfm_reply but context already has whatsapp_flow_response_received,
+            # convert to internal type to prevent re-processing (matches hanna pattern).
+            if (message_data.get('type') == 'interactive'
+                    and message_data.get('interactive', {}).get('type') == 'nfm_reply'
+                    and flow_context.get('whatsapp_flow_response_received')):
+                logger.info(
+                    f"Converting already-processed nfm_reply to "
+                    f"internal_whatsapp_flow_response for {contact.phone_number}"
+                )
+                message_data = {'type': 'internal_whatsapp_flow_response'}
+                is_internal = True
+
             # --- Handle question step awaiting reply ---
             if (current_step.step_type == 'question'
                     and '_question_awaiting_reply_for' in flow_context):
@@ -1238,6 +1258,10 @@ def execute_actions(actions: List[Dict[str, Any]]):
     """
     Execute a list of actions (send messages, typing indicators, etc.).
     Called by the task layer after process_message_for_flow returns.
+
+    Actions use hanna-compatible format:
+    - send_whatsapp_message: {recipient_wa_id, message_type, data}
+    - send_typing_indicator: {recipient_wa_id}
     """
     from meta_integration.utils import send_whatsapp_message, send_typing_indicator
 
@@ -1245,15 +1269,18 @@ def execute_actions(actions: List[Dict[str, Any]]):
         action_type = action.get('type')
         try:
             if action_type == 'send_whatsapp_message':
-                recipient = action.get('recipient')
-                msg_config = action.get('message_config')
-                if recipient and msg_config:
-                    send_whatsapp_message(recipient, msg_config)
+                wa_id = action.get('recipient_wa_id')
+                msg_type = action.get('message_type')
+                data = action.get('data')
+                if wa_id and msg_type and data is not None:
+                    # Reconstruct message_config for the send utility
+                    msg_config = {'message_type': msg_type, msg_type: data}
+                    send_whatsapp_message(wa_id, msg_config)
             elif action_type == 'send_typing_indicator':
-                recipient = action.get('recipient')
-                if recipient:
+                wa_id = action.get('recipient_wa_id')
+                if wa_id:
                     try:
-                        send_typing_indicator(recipient)
+                        send_typing_indicator(wa_id)
                     except Exception as e:
                         logger.warning(f"Typing indicator failed: {e}")
             elif action_type and action_type.startswith('_internal_'):
@@ -1264,3 +1291,78 @@ def execute_actions(actions: List[Dict[str, Any]]):
             logger.error(
                 f"Error executing action {action_type}: {e}", exc_info=True
             )
+
+
+# Alias for hanna compatibility
+_clear_contact_flow_state = _clear_flow_state
+
+
+def process_whatsapp_flow_response(msg_data: dict, contact: 'Contact', app_config=None) -> tuple:
+    """
+    Process WhatsApp Flow response messages (nfm_reply type).
+    Updates the flow context with response data.
+    Follows hanna's process_whatsapp_flow_response pattern.
+
+    Args:
+        msg_data: The message data from Meta webhook containing the flow response
+        contact: The Contact instance who submitted the flow
+        app_config: Optional MetaAppConfig instance
+
+    Returns:
+        tuple: (success: bool, notes: str)
+    """
+    from .models import WhatsAppFlow
+    from .whatsapp_flow_response_processor import WhatsAppFlowResponseProcessor
+
+    try:
+        interactive_data = msg_data.get('interactive', {})
+        nfm_reply = interactive_data.get('nfm_reply', {})
+        response_json = nfm_reply.get('response_json')
+
+        if not response_json:
+            logger.warning(f"Flow response has no response_json: {msg_data}")
+            return False, 'No response_json in flow response'
+
+        try:
+            response_data = (
+                json.loads(response_json)
+                if isinstance(response_json, str)
+                else response_json
+            )
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse flow response JSON: {e}")
+            return False, f'Invalid JSON: {e}'
+
+        # Find matching WhatsApp flow
+        filter_kwargs = {'is_active': True, 'sync_status': 'published'}
+        if app_config:
+            filter_kwargs['meta_app_config'] = app_config
+
+        whatsapp_flows = WhatsAppFlow.objects.filter(**filter_kwargs)
+        whatsapp_flow = whatsapp_flows.first()
+
+        if not whatsapp_flow:
+            logger.error("No active WhatsApp flow found to process response")
+            return False, 'No matching WhatsApp flow found'
+
+        # Call WhatsAppFlowResponseProcessor to update context only
+        logger.info(f"Processing flow response for {whatsapp_flow.name}")
+        result = WhatsAppFlowResponseProcessor.process_response(
+            whatsapp_flow=whatsapp_flow,
+            contact=contact,
+            response_data=response_data,
+        )
+
+        if result and result.get('success'):
+            logger.info("Successfully updated flow context for WhatsApp flow response.")
+            # Note: Flow continuation will be triggered asynchronously by the calling code
+            # via process_flow_for_message_task to ensure reliable transaction handling
+            return True, 'Flow context updated with WhatsApp flow data.'
+        else:
+            error_note = result.get('notes') if result else 'Unknown error'
+            logger.error(f"Flow response processing failed: {error_note}")
+            return False, f'Flow processing failed: {error_note}'
+
+    except Exception as e:
+        logger.error(f"Error handling flow response: {e}", exc_info=True)
+        return False, f'Exception processing flow: {str(e)[:200]}'

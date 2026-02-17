@@ -69,7 +69,7 @@ class Conversation(models.Model):
 
 
 class Message(models.Model):
-    """WhatsApp message"""
+    """WhatsApp message — aligned with morebnyemba/hanna's Message model."""
     
     MESSAGE_TYPE_CHOICES = [
         ('text', 'Text'),
@@ -91,12 +91,20 @@ class Message(models.Model):
     contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name='messages')
     
     # Message identification
-    message_id = models.CharField(max_length=200, unique=True, help_text="WhatsApp message ID")
+    # Nullable for outgoing messages before Meta API returns a WAMID (matches hanna's wamid)
+    message_id = models.CharField(
+        max_length=200, unique=True, null=True, blank=True,
+        help_text="WhatsApp message ID (WAMID). Set from webhook for inbound, from API response for outbound."
+    )
     direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES)
     message_type = models.CharField(max_length=20, choices=MESSAGE_TYPE_CHOICES)
     
     # Content
     content = models.TextField(blank=True)
+    content_payload = models.JSONField(
+        null=True, blank=True,
+        help_text="Full message payload. For inbound: raw webhook data. For outbound: API data dict."
+    )
     media_url = models.URLField(blank=True)
     media_id = models.CharField(max_length=200, blank=True)
     media_mime_type = models.CharField(max_length=100, blank=True)
@@ -111,23 +119,38 @@ class Message(models.Model):
     # Interactive message data
     interactive_data = models.JSONField(null=True, blank=True)
     
-    # Status
+    # Config (matches hanna's app_config FK)
+    app_config = models.ForeignKey(
+        'meta_integration.MetaAppConfig',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='messages',
+        help_text="MetaAppConfig used for this message."
+    )
+    
+    # Status (matches hanna's status choices)
     status = models.CharField(
         max_length=20,
         choices=[
+            ('pending_dispatch', 'Pending Dispatch'),
             ('queued', 'Queued'),
             ('sent', 'Sent'),
             ('delivered', 'Delivered'),
             ('read', 'Read'),
             ('failed', 'Failed'),
+            ('received', 'Received'),
         ],
         default='queued'
+    )
+    status_timestamp = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When status was last updated."
     )
     
     error_code = models.CharField(max_length=50, blank=True)
     error_message = models.TextField(blank=True)
     
-    # Reply information
+    # Reply information (equivalent to hanna's related_incoming_message)
     replied_to = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='replies')
     
     # Metadata

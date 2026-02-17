@@ -157,8 +157,8 @@ class FlowSessionModelTests(TestCase):
 
     def setUp(self):
         self.contact = Contact.objects.create(
-            phone_number='+1234567890',
-            source='whatsapp'
+            whatsapp_id='1234567890',
+            phone_number='+1234567890'
         )
         self.flow = Flow.objects.create(name='test_flow')
         self.step = FlowStep.objects.create(
@@ -247,8 +247,8 @@ class FlowProcessorTests(TransactionTestCase):
 
     def setUp(self):
         self.contact = Contact.objects.create(
-            phone_number='+1234567890',
-            source='whatsapp'
+            whatsapp_id='1234567890',
+            phone_number='+1234567890'
         )
         self.flow = Flow.objects.create(
             name='solar_quote',
@@ -409,8 +409,8 @@ class FlowAPITests(APITestCase):
     def test_list_sessions(self):
         """Test listing flow sessions."""
         contact = Contact.objects.create(
-            phone_number='+1234567890',
-            source='whatsapp'
+            whatsapp_id='1234567890',
+            phone_number='+1234567890'
         )
         FlowSession.objects.create(
             contact=contact,
@@ -432,8 +432,8 @@ class FlowIntegrationTests(TransactionTestCase):
 
     def setUp(self):
         self.contact = Contact.objects.create(
-            phone_number='+1234567890',
-            source='whatsapp'
+            whatsapp_id='1234567890',
+            phone_number='+1234567890'
         )
         
         # Create a simple 3-step flow
