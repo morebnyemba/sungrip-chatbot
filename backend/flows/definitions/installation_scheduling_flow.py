@@ -15,10 +15,28 @@ INSTALLATION_SCHEDULING_FLOW = {
     "is_active": True,
     "trigger_keywords": ["schedule", "installation", "appointment", "install", "book"],
     "steps": [
-        # ── WhatsApp Flow integration entry point ──────────────────────
+        # ── Entry: ensure customer profile exists ──────────────────────
+        {
+            "name": "ensure_profile",
+            "is_entry_point": True,
+            "type": "action",
+            "config": {
+                "actions_to_run": [{
+                    "action_type": "ensure_customer_profile",
+                    "parameters": {}
+                }]
+            },
+            "transitions": [
+                {
+                    "to_step": "check_whatsapp_flow",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        # ── WhatsApp Flow integration check ────────────────────────────
         {
             "name": "check_whatsapp_flow",
-            "is_entry_point": True,
             "type": "action",
             "config": {
                 "actions_to_run": [{
@@ -74,7 +92,7 @@ INSTALLATION_SCHEDULING_FLOW = {
             },
             "transitions": [
                 {
-                    "to_step": "confirm_scheduling",
+                    "to_step": "format_install_labels",
                     "priority": 1,
                     "condition_config": {"type": "whatsapp_flow_response_received"}
                 }
@@ -400,7 +418,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                         "type": "button",
                         "header": {"type": "text", "text": "📋 Booking Summary"},
                         "body": {
-                            "text": "Please review your installation booking:\n\n"
+                            "text": "Hi {{customer_name}}, please review your booking:\n\n"
                                    "━━━━━━━━━━━━━━━━━━━━\n"
                                    "⚡ *System:* {{system_size}}\n"
                                    "💳 *Payment:* {{payment_preference}}\n"
@@ -408,11 +426,12 @@ INSTALLATION_SCHEDULING_FLOW = {
                                    "🕐 *Time:* {{time_preference}}\n"
                                    "🏠 *Address:* {{installation_address}}\n"
                                    "━━━━━━━━━━━━━━━━━━━━\n\n"
-                                   "Tap *Confirm* to submit your booking."
+                                   "Tap *Confirm* to submit or *Edit* to start over."
                         },
                         "action": {
                             "buttons": [
                                 {"type": "reply", "reply": {"id": "confirm_install", "title": "✅ Confirm"}},
+                                {"type": "reply", "reply": {"id": "edit_install", "title": "✏️ Edit"}},
                                 {"type": "reply", "reply": {"id": "cancel_install", "title": "❌ Cancel"}}
                             ]
                         }
@@ -433,8 +452,16 @@ INSTALLATION_SCHEDULING_FLOW = {
                     }
                 },
                 {
-                    "to_step": "end_cancelled",
+                    "to_step": "fallback_welcome",
                     "priority": 2,
+                    "condition_config": {
+                        "type": "interactive_reply_id_equals",
+                        "value": "edit_install"
+                    }
+                },
+                {
+                    "to_step": "end_cancelled",
+                    "priority": 3,
                     "condition_config": {"type": "always_true"}
                 }
             ]

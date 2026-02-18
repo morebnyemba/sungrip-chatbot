@@ -15,10 +15,28 @@ CONTACT_SUPPORT_FLOW = {
     "is_active": True,
     "trigger_keywords": ["support", "help", "contact", "problem", "issue"],
     "steps": [
-        # ── WhatsApp Flow integration entry point ──────────────────────
+        # ── Entry: ensure customer profile exists ──────────────────────
+        {
+            "name": "ensure_profile",
+            "is_entry_point": True,
+            "type": "action",
+            "config": {
+                "actions_to_run": [{
+                    "action_type": "ensure_customer_profile",
+                    "parameters": {}
+                }]
+            },
+            "transitions": [
+                {
+                    "to_step": "check_whatsapp_flow",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        # ── WhatsApp Flow integration check ────────────────────────────
         {
             "name": "check_whatsapp_flow",
-            "is_entry_point": True,
             "type": "action",
             "config": {
                 "actions_to_run": [{
@@ -74,7 +92,7 @@ CONTACT_SUPPORT_FLOW = {
             },
             "transitions": [
                 {
-                    "to_step": "confirm_support",
+                    "to_step": "format_support_labels",
                     "priority": 1,
                     "condition_config": {"type": "whatsapp_flow_response_received"}
                 }
@@ -252,17 +270,18 @@ CONTACT_SUPPORT_FLOW = {
                         "type": "button",
                         "header": {"type": "text", "text": "💬 Review Support Request"},
                         "body": {
-                            "text": "Please confirm your support request:\n\n"
+                            "text": "Hi {{customer_name}}, please confirm your support request:\n\n"
                                    "━━━━━━━━━━━━━━━━━━━━\n"
                                    "📋 *Category:* {{support_category}}\n"
                                    "📝 *Details:* {{issue_details}}\n"
                                    "📞 *Contact via:* {{contact_method}}\n"
                                    "━━━━━━━━━━━━━━━━━━━━\n\n"
-                                   "Tap *Submit* to send your request."
+                                   "Tap *Submit* to send or *Edit* to start over."
                         },
                         "action": {
                             "buttons": [
                                 {"type": "reply", "reply": {"id": "confirm_support", "title": "✅ Submit"}},
+                                {"type": "reply", "reply": {"id": "edit_support", "title": "✏️ Edit"}},
                                 {"type": "reply", "reply": {"id": "cancel_support", "title": "❌ Cancel"}}
                             ]
                         }
@@ -283,8 +302,16 @@ CONTACT_SUPPORT_FLOW = {
                     }
                 },
                 {
-                    "to_step": "end_cancelled",
+                    "to_step": "fallback_welcome",
                     "priority": 2,
+                    "condition_config": {
+                        "type": "interactive_reply_id_equals",
+                        "value": "edit_support"
+                    }
+                },
+                {
+                    "to_step": "end_cancelled",
+                    "priority": 3,
                     "condition_config": {"type": "always_true"}
                 }
             ]
