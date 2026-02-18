@@ -47,47 +47,51 @@ MAIN_MENU_FLOW = {
                         "type": "list",
                         "header": {
                             "type": "text",
-                            "text": "Sungrip Solar"
+                            "text": "☀️ Sungrip Solar"
                         },
                         "body": {
-                            "text": "🌞 Hello {{customer_name}}! Welcome to Sungrip Solar ☀️\n\n"
-                                   "We provide reliable solar energy solutions "
-                                   "for homes and businesses across Zimbabwe.\n\n"
-                                   "How can we help you today?"
+                            "text": "Hi {{customer_name}}, welcome to *Sungrip Solar* — "
+                                   "Zimbabwe's trusted solar energy partner.\n\n"
+                                   "🔋 *What we offer:*\n"
+                                   "• Custom solar systems for homes & businesses\n"
+                                   "• Professional installation & maintenance\n"
+                                   "• Flexible packages from 3 kW to 10 kW+\n"
+                                   "• 25-year panel warranty\n\n"
+                                   "Tap the button below to explore our services 👇"
                         },
                         "footer": {
-                            "text": "Select an option below"
+                            "text": "Powered by Sungrip Solar Energy"
                         },
                         "action": {
-                            "button": "View Options",
+                            "button": "📋 View Options",
                             "sections": [
                                 {
-                                    "title": "Our Services",
+                                    "title": "Solar Solutions",
                                     "rows": [
                                         {
                                             "id": "view_packages",
-                                            "title": "View Solar Packages",
-                                            "description": "Browse our solar package options"
+                                            "title": "🔆 Solar Packages",
+                                            "description": "Compare our ready-made solar packages & pricing"
                                         },
                                         {
                                             "id": "request_quote",
-                                            "title": "Request a Quote",
-                                            "description": "Get a personalized solar system quote"
+                                            "title": "📋 Get a Free Quote",
+                                            "description": "Receive a personalised quote in minutes"
                                         },
                                         {
                                             "id": "schedule_installation",
-                                            "title": "Schedule Installation",
-                                            "description": "Book your solar panel installation"
+                                            "title": "📅 Book Installation",
+                                            "description": "Choose a convenient date for your setup"
                                         }
                                     ]
                                 },
                                 {
-                                    "title": "Support",
+                                    "title": "Help & Support",
                                     "rows": [
                                         {
                                             "id": "contact_support",
-                                            "title": "Contact Support",
-                                            "description": "Get help from our support team"
+                                            "title": "💬 Contact Support",
+                                            "description": "Speak to our team for any enquiry"
                                         }
                                     ]
                                 }
