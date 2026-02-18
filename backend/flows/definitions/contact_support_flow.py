@@ -92,9 +92,32 @@ CONTACT_SUPPORT_FLOW = {
             },
             "transitions": [
                 {
-                    "to_step": "format_support_labels",
+                    "to_step": "map_wa_support_fields",
                     "priority": 1,
                     "condition_config": {"type": "whatsapp_flow_response_received"}
+                }
+            ]
+        },
+        # ── Map WA field names → conversational field names ──────────
+        {
+            "name": "map_wa_support_fields",
+            "type": "action",
+            "config": {
+                "actions_to_run": [{
+                    "action_type": "map_wa_response",
+                    "parameters": {
+                        "mappings": {
+                            "issue_description": "issue_details",
+                            "contact_preference": "contact_method"
+                        }
+                    }
+                }]
+            },
+            "transitions": [
+                {
+                    "to_step": "format_support_labels",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
                 }
             ]
         },

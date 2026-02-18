@@ -34,6 +34,27 @@ def register_flow_action(name):
     return decorator
 
 
+@register_flow_action('map_wa_response')
+def map_wa_response(contact, context: dict, params: dict) -> dict:
+    """
+    Maps WhatsApp Flow response variable names to the names expected
+    by the conversational flow.  Also copies contact_name → customer_name
+    when ensure_customer_profile hasn't already set it.
+
+    Expected params:
+        - mappings: dict of {wa_field: flow_field}
+                    e.g. {"address": "installation_address"}
+    """
+    mappings = params.get('mappings', {})
+    mapped = 0
+    for wa_key, flow_key in mappings.items():
+        if wa_key in context and flow_key not in context:
+            context[flow_key] = context[wa_key]
+            mapped += 1
+    logger.info(f"map_wa_response: mapped {mapped}/{len(mappings)} field(s)")
+    return context
+
+
 @register_flow_action('ensure_customer_profile')
 def ensure_customer_profile(contact, context: dict, params: dict) -> dict:
     """
@@ -602,13 +623,24 @@ def fetch_package_details(contact, context: dict, params: dict) -> dict:
         context['package_found'] = True
         context['package_price'] = f"${pkg.total_price:,.0f} USD"
         context['package_system_size'] = f"{pkg.system_size_kw} kW"
+
+        # Map system_size_kw → raw interactive ID used by LABEL_MAPS
+        kw_to_id = {3.5: '3.5kva', 4.2: '4.2kva', 6.2: '6.2kva'}
+        context['system_size'] = kw_to_id.get(
+            float(pkg.system_size_kw), f"{pkg.system_size_kw}kva"
+        )
+
+        # Map payment_type → raw interactive ID used by LABEL_MAPS
         if pkg.payment_type == 'installment' and pkg.installment_months:
             monthly = pkg.total_price / pkg.installment_months
             context['package_payment_label'] = (
                 f"📆 {pkg.installment_months}-Month Plan (${monthly:,.0f}/mo)"
             )
+            context['payment_preference'] = f"installment_{pkg.installment_months}"
         else:
             context['package_payment_label'] = "💵 Cash on Delivery"
+            context['payment_preference'] = 'cash'
+
         logger.info(f"fetch_package_details: Loaded details for '{pkg.name}'")
 
     except SolarPackage.DoesNotExist:

@@ -92,9 +92,90 @@ SOLAR_QUOTE_FLOW = {
             },
             "transitions": [
                 {
-                    "to_step": "format_quote_labels",
+                    "to_step": "map_wa_quote_fields",
                     "priority": 1,
                     "condition_config": {"type": "whatsapp_flow_response_received"}
+                }
+            ]
+        },
+        # ── Map WA field names → conversational field names ──────────
+        {
+            "name": "map_wa_quote_fields",
+            "type": "action",
+            "config": {
+                "actions_to_run": [{
+                    "action_type": "map_wa_response",
+                    "parameters": {
+                        "mappings": {}
+                    }
+                }]
+            },
+            "transitions": [
+                {
+                    "to_step": "wa_ask_property_type",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        # ── WA path: ask missing fields ──────────────────────────────
+        {
+            "name": "wa_ask_property_type",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "interactive",
+                    "interactive": {
+                        "type": "button",
+                        "body": {
+                            "text": "Thanks for submitting the form! Just a couple more details.\n\n"
+                                   "🏠 What type of property is this for?"
+                        },
+                        "action": {
+                            "buttons": [
+                                {"type": "reply", "reply": {"id": "residential", "title": "🏠 Residential"}},
+                                {"type": "reply", "reply": {"id": "commercial", "title": "🏢 Commercial"}},
+                                {"type": "reply", "reply": {"id": "industrial", "title": "🏭 Industrial"}}
+                            ]
+                        }
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "interactive_id",
+                    "save_to_variable": "property_type"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "wa_ask_location_pin",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        # ── WA path: ask missing location pin ────────────────────────
+        {
+            "name": "wa_ask_location_pin",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "text",
+                    "text": {
+                        "body": "Thanks for submitting the form! One more thing:\n\n"
+                               "📌 Please share your *location pin* so we can assess your area.\n\n"
+                               "Tap 📎 → 📍 Location → Send"
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "location",
+                    "save_to_variable": "location_pin"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "format_quote_labels",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
                 }
             ]
         },

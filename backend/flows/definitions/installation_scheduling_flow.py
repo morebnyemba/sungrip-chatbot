@@ -92,9 +92,144 @@ INSTALLATION_SCHEDULING_FLOW = {
             },
             "transitions": [
                 {
-                    "to_step": "format_install_labels",
+                    "to_step": "map_wa_install_fields",
                     "priority": 1,
                     "condition_config": {"type": "whatsapp_flow_response_received"}
+                }
+            ]
+        },
+        # ── Map WA field names → conversational field names ──────────
+        {
+            "name": "map_wa_install_fields",
+            "type": "action",
+            "config": {
+                "actions_to_run": [{
+                    "action_type": "map_wa_response",
+                    "parameters": {
+                        "mappings": {
+                            "address": "installation_address",
+                            "contact_name": "customer_name"
+                        }
+                    }
+                }]
+            },
+            "transitions": [
+                {
+                    "to_step": "wa_ask_location_pin",
+                    "priority": 1,
+                    "condition_config": {
+                        "type": "variable_exists",
+                        "variable_name": "system_size"
+                    }
+                },
+                {
+                    "to_step": "wa_ask_payment",
+                    "priority": 2,
+                    "condition_config": {"type": "auto"}
+                }
+            ]
+        },
+        # ── WA path: ask missing fields ────────────────────────────
+        {
+            "name": "wa_ask_payment",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "interactive",
+                    "interactive": {
+                        "type": "button",
+                        "header": {"type": "text", "text": "💳 Payment Method"},
+                        "body": {
+                            "text": "Thanks for submitting the form! Just a couple more details.\n\n"
+                                   "How would you like to pay?\n\n"
+                                   "💵 *Cash* \u2014 Pay on delivery & installation\n"
+                                   "📆 *6-Month Plan* \u2014 Spread cost over 6 months"
+                        },
+                        "action": {
+                            "buttons": [
+                                {"type": "reply", "reply": {"id": "cash", "title": "💵 Cash / Full"}},
+                                {"type": "reply", "reply": {"id": "installment_6", "title": "📆 6-Month Plan"}}
+                            ]
+                        }
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "interactive_id",
+                    "save_to_variable": "payment_preference"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "wa_ask_system",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "wa_ask_system",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "interactive",
+                    "interactive": {
+                        "type": "list",
+                        "body": {
+                            "text": "\u26a1 Which system would you like installed?"
+                        },
+                        "footer": {
+                            "text": "Prices in USD \u00b7 Installation included"
+                        },
+                        "action": {
+                            "button": "Select System",
+                            "sections": [
+                                {
+                                    "title": "Available Systems",
+                                    "rows": [
+                                        {"id": "3.5kva", "title": "\u26a1 3.5 kVA System", "description": "Small home \u00b7 Fridge, TV, lights"},
+                                        {"id": "4.2kva", "title": "\u26a1 4.2 kVA System", "description": "Medium home \u00b7 + Cameras, pump"},
+                                        {"id": "6.2kva", "title": "\u26a1 6.2 kVA System", "description": "Large home \u00b7 3 fridges, 1.5HP pump"},
+                                        {"id": "not_sure", "title": "\ud83e\udd14 Not Sure Yet", "description": "Our team will advise"}
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "interactive_id",
+                    "save_to_variable": "system_size"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "wa_ask_location_pin",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "wa_ask_location_pin",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "text",
+                    "text": {
+                        "body": "📌 Please share your *location pin* so our crew can find you.\n\n"
+                               "Tap \ud83d\udcce \u2192 \ud83d\udccd Location \u2192 Send"
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "location",
+                    "save_to_variable": "location_pin"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "format_install_labels",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
                 }
             ]
         },
@@ -114,9 +249,17 @@ INSTALLATION_SCHEDULING_FLOW = {
             },
             "transitions": [
                 {
+                    "to_step": "ask_preferred_date",
+                    "priority": 1,
+                    "condition_config": {
+                        "type": "variable_exists",
+                        "variable_name": "system_size"
+                    }
+                },
+                {
                     "to_step": "ask_payment_preference",
-                    "condition_config": {"type": "auto"},
-                    "priority": 1
+                    "priority": 2,
+                    "condition_config": {"type": "auto"}
                 }
             ]
         },

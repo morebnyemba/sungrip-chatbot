@@ -230,7 +230,13 @@ SOLAR_PACKAGES_FLOW = {
                 "target_flow_name": "installation_scheduling",
                 "message": "Great choice! Let's book your *{{package_name}}* installation. 📅",
                 "initial_context_template": {
-                    "package_interest": "{{package_name}}"
+                    "package_interest": "{{package_name}}",
+                    "package_name": "{{package_name}}",
+                    "package_price": "{{package_price}}",
+                    "package_system_size": "{{package_system_size}}",
+                    "package_payment_label": "{{package_payment_label}}",
+                    "system_size": "{{system_size}}",
+                    "payment_preference": "{{payment_preference}}"
                 }
             },
             "transitions": []
