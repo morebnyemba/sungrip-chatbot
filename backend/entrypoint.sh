@@ -3,7 +3,7 @@ set -e
 
 # Wait for database to be ready
 echo "Waiting for database..."
-while ! pg_isready -h ${DB_HOST:-db} -p ${DB_PORT:-5432} -U ${DB_USER:-sungrip_user}; do
+while ! pg_isready -h ${DB_HOST:-db} -p ${DB_PORT:-5432} -U ${DB_USER:-sungrip_user} -d ${DB_NAME:-sungrip_db}; do
   sleep 1
 done
 echo "Database is ready!"
