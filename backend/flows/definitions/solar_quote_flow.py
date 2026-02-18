@@ -86,8 +86,10 @@ SOLAR_QUOTE_FLOW = {
             "config": {
                 "message_type": "text",
                 "text": {
-                    "body": "Hello! I can help you get a quote for a solar system from Sungrip Solar. "
-                           "I'll need to ask you a few questions to provide an accurate quote."
+                    "body": "📋 *Solar Quote Request*\n\n"
+                           "Great choice! I'll walk you through a few quick questions "
+                           "to build you a personalised solar system quote.\n\n"
+                           "This takes less than 2 minutes ⏱️"
                 }
             },
             "transitions": [
@@ -127,13 +129,34 @@ SOLAR_QUOTE_FLOW = {
             "type": "question",
             "config": {
                 "message_config": {
-                    "message_type": "text",
-                    "text": {
-                        "body": "What type of roof do you have? (e.g., tile, metal, asbestos, concrete)"
+                    "message_type": "interactive",
+                    "interactive": {
+                        "type": "list",
+                        "body": {
+                            "text": "🏠 What type of roof do you have?\n\nThis helps us determine the best mounting system for your solar panels."
+                        },
+                        "footer": {
+                            "text": "Select your roof type"
+                        },
+                        "action": {
+                            "button": "Select Roof Type",
+                            "sections": [
+                                {
+                                    "title": "Roof Types",
+                                    "rows": [
+                                        {"id": "tile", "title": "Tile Roof", "description": "Clay or concrete tiles"},
+                                        {"id": "metal", "title": "Metal / IBR", "description": "Corrugated iron or metal sheets"},
+                                        {"id": "asbestos", "title": "Asbestos", "description": "Asbestos cement sheets"},
+                                        {"id": "concrete", "title": "Flat Concrete", "description": "Flat concrete slab roof"},
+                                        {"id": "other", "title": "Other", "description": "Thatch, shingle, or other"}
+                                    ]
+                                }
+                            ]
+                        }
                     }
                 },
                 "reply_config": {
-                    "expected_type": "text",
+                    "expected_type": "interactive_id",
                     "save_to_variable": "roof_type"
                 }
             },

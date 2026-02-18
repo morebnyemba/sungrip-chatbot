@@ -292,3 +292,67 @@ def check_whatsapp_flow(contact, context: dict, params: dict) -> dict:
         logger.error(f"Error checking WhatsApp flow '{flow_name}': {e}", exc_info=True)
 
     return context
+
+
+@register_flow_action('fetch_solar_packages')
+def fetch_solar_packages(contact, context: dict, params: dict) -> dict:
+    """
+    Fetches active solar packages from the database and formats them for display.
+
+    Expected params:
+        - save_to_variable: Variable name to save the formatted text
+                            (default: 'packages_text')
+
+    Sets context variables:
+        - <save_to_variable>: Formatted multi-line package listing
+        - packages_count: Number of active packages found
+    """
+    from products.models import SolarPackage
+
+    save_to_var = params.get('save_to_variable', 'packages_text')
+
+    try:
+        packages = SolarPackage.objects.filter(is_active=True).order_by('display_order', 'system_size_kw')
+
+        if not packages.exists():
+            context[save_to_var] = (
+                "We're currently updating our package offerings. "
+                "Please contact our team for the latest pricing."
+            )
+            context['packages_count'] = 0
+            logger.info("fetch_solar_packages: No active packages found in database")
+            return context
+
+        lines = ["☀️ *Sungrip Solar Packages* ☀️\n"]
+        for pkg in packages:
+            popular_badge = " ⭐ POPULAR" if pkg.is_popular else ""
+            recommended = pkg.get_recommended_for_display()
+            lines.append(
+                f"📦 *{pkg.name.upper()}*{popular_badge}\n"
+                f"• {pkg.system_size_kw}kW Solar System\n"
+                f"• Recommended for: {recommended}\n"
+            )
+
+            # Add features from JSON field
+            if pkg.features:
+                for feature in pkg.features:
+                    lines.append(f"• {feature}")
+
+            if pkg.installation_included:
+                lines.append("• Installation Included")
+
+            lines.append(f"💰 Price: ${pkg.total_price:,.0f}\n")
+
+        context[save_to_var] = "\n".join(lines)
+        context['packages_count'] = packages.count()
+        logger.info(f"fetch_solar_packages: Loaded {packages.count()} packages from database")
+
+    except Exception as e:
+        logger.error(f"fetch_solar_packages error: {e}", exc_info=True)
+        context[save_to_var] = (
+            "Sorry, we could not load our packages right now. "
+            "Please try again later or contact support."
+        )
+        context['packages_count'] = 0
+
+    return context

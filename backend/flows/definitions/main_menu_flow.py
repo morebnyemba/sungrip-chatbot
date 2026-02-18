@@ -65,6 +65,11 @@ MAIN_MENU_FLOW = {
                                     "title": "Our Services",
                                     "rows": [
                                         {
+                                            "id": "view_packages",
+                                            "title": "View Solar Packages",
+                                            "description": "Browse our solar package options"
+                                        },
+                                        {
                                             "id": "request_quote",
                                             "title": "Request a Quote",
                                             "description": "Get a personalized solar system quote"
@@ -73,11 +78,6 @@ MAIN_MENU_FLOW = {
                                             "id": "schedule_installation",
                                             "title": "Schedule Installation",
                                             "description": "Book your solar panel installation"
-                                        },
-                                        {
-                                            "id": "view_packages",
-                                            "title": "View Solar Packages",
-                                            "description": "Browse our solar package options"
                                         }
                                     ]
                                 },
@@ -102,26 +102,26 @@ MAIN_MENU_FLOW = {
             },
             "transitions": [
                 {
+                    "to_step": "route_to_packages",
+                    "condition_config": {
+                        "type": "interactive_reply_id_equals",
+                        "value": "view_packages"
+                    },
+                    "priority": 1
+                },
+                {
                     "to_step": "route_to_quote",
                     "condition_config": {
                         "type": "interactive_reply_id_equals",
                         "value": "request_quote"
                     },
-                    "priority": 1
+                    "priority": 2
                 },
                 {
                     "to_step": "route_to_installation",
                     "condition_config": {
                         "type": "interactive_reply_id_equals",
                         "value": "schedule_installation"
-                    },
-                    "priority": 2
-                },
-                {
-                    "to_step": "route_to_packages",
-                    "condition_config": {
-                        "type": "interactive_reply_id_equals",
-                        "value": "view_packages"
                     },
                     "priority": 3
                 },

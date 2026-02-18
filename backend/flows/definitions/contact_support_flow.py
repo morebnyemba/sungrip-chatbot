@@ -16,77 +16,60 @@ CONTACT_SUPPORT_FLOW = {
     "steps": [
         {
             "name": "welcome",
-            "type": "send_message",
+            "type": "question",
             "is_entry_point": True,
             "config": {
-                "message_type": "interactive",
-                "interactive": {
-                    "type": "list",
-                    "header": {
-                        "type": "text",
-                        "text": "Sungrip Support"
-                    },
-                    "body": {
-                        "text": "👋 Sungrip Solar Support\n\n"
-                               "Our support team is here to help you!\n\n"
-                               "Please select what you need help with:"
-                    },
-                    "footer": {
-                        "text": "Choose a category"
-                    },
-                    "action": {
-                        "button": "Select Category",
-                        "sections": [
-                            {
-                                "title": "Support Categories",
-                                "rows": [
-                                    {
-                                        "id": "technical",
-                                        "title": "Technical Issues",
-                                        "description": "System faults, inverter errors, panel issues"
-                                    },
-                                    {
-                                        "id": "billing",
-                                        "title": "Billing Questions",
-                                        "description": "Invoices, payments, account queries"
-                                    },
-                                    {
-                                        "id": "installation",
-                                        "title": "Installation Support",
-                                        "description": "Installation queries and follow-ups"
-                                    },
-                                    {
-                                        "id": "product_info",
-                                        "title": "Product Information",
-                                        "description": "Solar panels, inverters, batteries"
-                                    },
-                                    {
-                                        "id": "other",
-                                        "title": "Other",
-                                        "description": "Any other enquiry"
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                }
-            },
-            "transitions": [
-                {
-                    "to_step": "ask_support_type",
-                    "condition_config": {"type": "auto"},
-                    "priority": 1
-                }
-            ]
-        },
-        {
-            "name": "ask_support_type",
-            "type": "question",
-            "config": {
                 "message_config": {
-                    "message_type": "text",
-                    "text": {
-                        "body": "Please select a support category from the list above:"
+                    "message_type": "interactive",
+                    "interactive": {
+                        "type": "list",
+                        "header": {
+                            "type": "text",
+                            "text": "Sungrip Support"
+                        },
+                        "body": {
+                            "text": "👋 Sungrip Solar Support\n\n"
+                                   "Our support team is here to help you!\n\n"
+                                   "Please select what you need help with:"
+                        },
+                        "footer": {
+                            "text": "Choose a category"
+                        },
+                        "action": {
+                            "button": "Select Category",
+                            "sections": [
+                                {
+                                    "title": "Support Categories",
+                                    "rows": [
+                                        {
+                                            "id": "technical",
+                                            "title": "Technical Issues",
+                                            "description": "System faults, inverter errors, panel issues"
+                                        },
+                                        {
+                                            "id": "billing",
+                                            "title": "Billing Questions",
+                                            "description": "Invoices, payments, account queries"
+                                        },
+                                        {
+                                            "id": "installation",
+                                            "title": "Installation Support",
+                                            "description": "Installation queries and follow-ups"
+                                        },
+                                        {
+                                            "id": "product_info",
+                                            "title": "Product Information",
+                                            "description": "Solar panels, inverters, batteries"
+                                        },
+                                        {
+                                            "id": "other",
+                                            "title": "Other",
+                                            "description": "Any other enquiry"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
                     }
                 },
                 "reply_config": {

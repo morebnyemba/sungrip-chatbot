@@ -86,8 +86,10 @@ INSTALLATION_SCHEDULING_FLOW = {
             "config": {
                 "message_type": "text",
                 "text": {
-                    "body": "I can help you schedule your solar system installation. "
-                           "Let me check available dates for you."
+                    "body": "📅 *Installation Scheduling*\n\n"
+                           "Let's get your solar system installation booked! "
+                           "I'll need a few details to find the best time for you.\n\n"
+                           "This takes less than 2 minutes ⏱️"
                 }
             },
             "transitions": [
