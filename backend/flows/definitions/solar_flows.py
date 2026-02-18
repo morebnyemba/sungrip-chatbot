@@ -6,51 +6,96 @@ Includes main menu, quote request, installation scheduling, solar packages, and 
 """
 
 # Main Menu Flow - Entry point for users
+# Uses WhatsApp interactive list messages following hanna's architecture pattern.
 MAIN_MENU_FLOW = {
     "name": "main_menu",
     "friendly_name": "Main Menu",
-    "description": "Main menu for Sungrip Solar chatbot - presents users with service options",
+    "description": "Main menu for Sungrip Solar chatbot - presents users with service options via interactive list",
     "is_active": True,
     "trigger_keywords": ["menu", "start", "hello", "hi", "help", "options"],
     "steps": [
+        # Step 1: Ensure customer profile exists (action entry point)
         {
-            "name": "welcome",
-            "type": "send_message",
+            "name": "ensure_customer_profile_exists",
+            "type": "action",
             "is_entry_point": True,
             "config": {
-                "message_type": "text",
-                "text": {
-                    "body": "🌞 Welcome to Sungrip Solar! ☀️\n\n"
-                           "We're here to help you with solar energy solutions. "
-                           "How can we assist you today?\n\n"
-                           "Please select an option:\n"
-                           "1️⃣ Request a Quote\n"
-                           "2️⃣ Schedule Installation\n"
-                           "3️⃣ View Solar Packages\n"
-                           "4️⃣ Contact Support\n\n"
-                           "Reply with the number of your choice (1-4)."
-                }
+                "actions_to_run": [
+                    {
+                        "action_type": "ensure_customer_profile",
+                        "parameters": {}
+                    }
+                ]
             },
             "transitions": [
                 {
-                    "to_step": "handle_choice",
+                    "to_step": "show_main_menu",
                     "condition_config": {"type": "auto"},
                     "priority": 1
                 }
             ]
         },
+        # Step 2: Show interactive list menu
         {
-            "name": "handle_choice",
+            "name": "show_main_menu",
             "type": "question",
             "config": {
                 "message_config": {
-                    "message_type": "text",
-                    "text": {
-                        "body": "Please enter your choice (1-4):"
+                    "message_type": "interactive",
+                    "interactive": {
+                        "type": "list",
+                        "header": {
+                            "type": "text",
+                            "text": "Sungrip Solar"
+                        },
+                        "body": {
+                            "text": "🌞 Welcome to Sungrip Solar! ☀️\n\n"
+                                   "We provide reliable solar energy solutions "
+                                   "for homes and businesses across Zimbabwe.\n\n"
+                                   "How can we help you today?"
+                        },
+                        "footer": {
+                            "text": "Select an option below"
+                        },
+                        "action": {
+                            "button": "View Options",
+                            "sections": [
+                                {
+                                    "title": "Our Services",
+                                    "rows": [
+                                        {
+                                            "id": "request_quote",
+                                            "title": "Request a Quote",
+                                            "description": "Get a personalized solar system quote"
+                                        },
+                                        {
+                                            "id": "schedule_installation",
+                                            "title": "Schedule Installation",
+                                            "description": "Book your solar panel installation"
+                                        },
+                                        {
+                                            "id": "view_packages",
+                                            "title": "View Solar Packages",
+                                            "description": "Browse our solar package options"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "title": "Support",
+                                    "rows": [
+                                        {
+                                            "id": "contact_support",
+                                            "title": "Contact Support",
+                                            "description": "Get help from our support team"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
                     }
                 },
                 "reply_config": {
-                    "expected_type": "text",
+                    "expected_type": "interactive_id",
                     "save_to_variable": "menu_choice"
                 }
             },
@@ -58,48 +103,50 @@ MAIN_MENU_FLOW = {
                 {
                     "to_step": "route_to_quote",
                     "condition_config": {
-                        "type": "expression",
-                        "expression": "menu_choice in ['1', 'quote', 'request quote']"
+                        "type": "interactive_reply_id_equals",
+                        "value": "request_quote"
                     },
                     "priority": 1
                 },
                 {
                     "to_step": "route_to_installation",
                     "condition_config": {
-                        "type": "expression",
-                        "expression": "menu_choice in ['2', 'schedule', 'installation']"
+                        "type": "interactive_reply_id_equals",
+                        "value": "schedule_installation"
                     },
                     "priority": 2
                 },
                 {
                     "to_step": "route_to_packages",
                     "condition_config": {
-                        "type": "expression",
-                        "expression": "menu_choice in ['3', 'packages', 'view packages']"
+                        "type": "interactive_reply_id_equals",
+                        "value": "view_packages"
                     },
                     "priority": 3
                 },
                 {
                     "to_step": "route_to_support",
                     "condition_config": {
-                        "type": "expression",
-                        "expression": "menu_choice in ['4', 'support', 'help']"
+                        "type": "interactive_reply_id_equals",
+                        "value": "contact_support"
                     },
                     "priority": 4
                 },
                 {
-                    "to_step": "invalid_choice",
-                    "condition_config": {"type": "auto"},
+                    "to_step": "show_main_menu",
+                    "condition_config": {"type": "always_true"},
                     "priority": 5
                 }
             ]
         },
+        # Route steps - switch to sub-flows
         {
             "name": "route_to_quote",
             "type": "switch_flow",
             "config": {
                 "target_flow_name": "solar_quote_request",
-                "message": "Great! Let me help you get a quote. 📋"
+                "message": "Great! Let me help you get a quote. 📋",
+                "initial_context_template": {}
             },
             "transitions": []
         },
@@ -108,7 +155,8 @@ MAIN_MENU_FLOW = {
             "type": "switch_flow",
             "config": {
                 "target_flow_name": "installation_scheduling",
-                "message": "Perfect! Let's schedule your installation. 📅"
+                "message": "Perfect! Let's schedule your installation. 📅",
+                "initial_context_template": {}
             },
             "transitions": []
         },
@@ -117,7 +165,8 @@ MAIN_MENU_FLOW = {
             "type": "switch_flow",
             "config": {
                 "target_flow_name": "solar_packages",
-                "message": "Let me show you our available solar packages. 📦"
+                "message": "Let me show you our available solar packages. 📦",
+                "initial_context_template": {}
             },
             "transitions": []
         },
@@ -126,26 +175,10 @@ MAIN_MENU_FLOW = {
             "type": "switch_flow",
             "config": {
                 "target_flow_name": "contact_support",
-                "message": "I'll connect you with our support team. 👥"
+                "message": "I'll connect you with our support team. 👥",
+                "initial_context_template": {}
             },
             "transitions": []
-        },
-        {
-            "name": "invalid_choice",
-            "type": "send_message",
-            "config": {
-                "message_type": "text",
-                "text": {
-                    "body": "I'm sorry, I didn't understand that. Please reply with a number from 1 to 4."
-                }
-            },
-            "transitions": [
-                {
-                    "to_step": "handle_choice",
-                    "condition_config": {"type": "auto"},
-                    "priority": 1
-                }
-            ]
         }
     ]
 }

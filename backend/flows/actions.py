@@ -34,6 +34,46 @@ def register_flow_action(name):
     return decorator
 
 
+@register_flow_action('ensure_customer_profile')
+def ensure_customer_profile(contact, context: dict, params: dict) -> dict:
+    """
+    Ensures a customer profile exists for the contact.
+    Creates one from the WhatsApp profile name if not found.
+    Sets context variables: customer_name, customer_exists.
+    """
+    from customers.models import Customer
+
+    try:
+        profile_name = getattr(contact, 'profile_name', '') or ''
+        phone = getattr(contact, 'phone_number', '') or ''
+
+        customer, created = Customer.objects.get_or_create(
+            phone_number=phone,
+            defaults={
+                'full_name': profile_name or 'WhatsApp User',
+                'whatsapp_number': phone,
+            }
+        )
+
+        # Update profile name if it was missing
+        if not created and not customer.full_name and profile_name:
+            customer.full_name = profile_name
+            customer.save(update_fields=['full_name'])
+
+        context['customer_name'] = customer.full_name
+        context['customer_exists'] = not created
+        logger.info(
+            f"ensure_customer_profile: {'found' if not created else 'created'} "
+            f"customer '{customer.full_name}' for {phone}"
+        )
+    except Exception as e:
+        logger.error(f"ensure_customer_profile error: {e}", exc_info=True)
+        context['customer_name'] = getattr(contact, 'profile_name', 'Customer')
+        context['customer_exists'] = False
+
+    return context
+
+
 @register_flow_action('calculate_solar_quote')
 def calculate_solar_quote(contact, context: dict, params: dict) -> dict:
     """
