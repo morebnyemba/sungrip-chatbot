@@ -394,18 +394,23 @@ def build_packages_interactive_list(contact, context: dict, params: dict) -> dic
             return context
 
         # Group packages by payment type into sections
+        # WhatsApp allows max 10 rows total across all sections
         cash_rows = []
         plan_rows = []
         id_map = {}
+        total_rows = 0
+        MAX_ROWS = 10
 
         for pkg in packages:
+            if total_rows >= MAX_ROWS:
+                break
+
             row_id = f"pkg_{pkg.pk}"
             popular = " ⭐" if pkg.is_popular else ""
 
             # Build title — WhatsApp max is 24 chars
             title = f"{pkg.name}{popular}"
             if len(title) > 24:
-                # Truncate name to fit, keeping the popular star
                 max_name = 24 - len(popular)
                 title = f"{pkg.name[:max_name]}{popular}"
 
@@ -422,11 +427,19 @@ def build_packages_interactive_list(contact, context: dict, params: dict) -> dic
                 "description": desc[:72]
             }
             id_map[row_id] = pkg.pk
+            total_rows += 1
 
             if pkg.payment_type == 'installment':
                 plan_rows.append(row)
             else:
                 cash_rows.append(row)
+
+        if packages.count() > MAX_ROWS:
+            logger.warning(
+                "Active packages (%d) exceed WhatsApp max rows (%d). "
+                "Only first %d shown. Deactivate some packages in admin.",
+                packages.count(), MAX_ROWS, MAX_ROWS
+            )
 
         sections = []
         if cash_rows:

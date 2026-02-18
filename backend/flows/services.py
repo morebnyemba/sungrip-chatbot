@@ -713,6 +713,15 @@ def _transition_to_step(
     step_actions, updated_context = _execute_step_actions(
         next_step, contact, flow_context.copy()
     )
+
+    # Persist context changes made by the step (e.g. action steps that
+    # set variables like package_found, _package_id_map, etc.).
+    # Without this, the loop's re-fetch of session.context_data would
+    # lose any variables the step just set.
+    if updated_context != flow_context:
+        session.context_data = updated_context
+        session.save(update_fields=['context_data', 'updated_at'])
+
     return step_actions, updated_context
 
 
