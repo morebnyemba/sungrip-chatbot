@@ -600,6 +600,15 @@ def fetch_package_details(contact, context: dict, params: dict) -> dict:
         context['package_name'] = pkg.name
         context['package_detail_text'] = "\n".join(lines)
         context['package_found'] = True
+        context['package_price'] = f"${pkg.total_price:,.0f} USD"
+        context['package_system_size'] = f"{pkg.system_size_kw} kW"
+        if pkg.payment_type == 'installment' and pkg.installment_months:
+            monthly = pkg.total_price / pkg.installment_months
+            context['package_payment_label'] = (
+                f"📆 {pkg.installment_months}-Month Plan (${monthly:,.0f}/mo)"
+            )
+        else:
+            context['package_payment_label'] = "💵 Cash on Delivery"
         logger.info(f"fetch_package_details: Loaded details for '{pkg.name}'")
 
     except SolarPackage.DoesNotExist:
@@ -616,4 +625,83 @@ def fetch_package_details(contact, context: dict, params: dict) -> dict:
             "Please try again."
         )
 
+    return context
+
+
+# ---------------------------------------------------------------------------
+# Label formatting action
+# ---------------------------------------------------------------------------
+
+# Maps raw interactive IDs to human-friendly display labels.
+# Used before confirmation steps so summaries read naturally.
+LABEL_MAPS = {
+    'payment_preference': {
+        'cash': '💵 Cash / Full Payment',
+        'installment_6': '📆 6-Month Payment Plan',
+    },
+    'system_size': {
+        '3.5kva': '⚡ 3.5 kVA System',
+        '4.2kva': '⚡ 4.2 kVA System',
+        '6.2kva': '⚡ 6.2 kVA System',
+        'not_sure': '🤔 Not Sure Yet',
+    },
+    'time_preference': {
+        'morning': '🌅 Morning (8 AM – 12 PM)',
+        'afternoon': '🌇 Afternoon (12 PM – 5 PM)',
+    },
+    'roof_type': {
+        'tile': '🏠 Tile Roof',
+        'metal': '🏠 Metal / IBR',
+        'asbestos': '🏠 Asbestos',
+        'concrete': '🏠 Flat Concrete',
+        'other': '🏠 Other',
+    },
+    'property_type': {
+        'residential': '🏠 Residential',
+        'commercial': '🏢 Commercial',
+        'industrial': '🏭 Industrial',
+    },
+    'support_category': {
+        'technical': '🔧 Technical Issues',
+        'billing': '💳 Billing & Payments',
+        'installation': '🏗️ Installation Support',
+        'product_info': '📦 Product Information',
+        'other': '📝 Other',
+    },
+    'contact_method': {
+        'whatsapp': '💬 WhatsApp',
+        'phone_call': '📞 Phone Call',
+        'email': '📧 Email',
+    },
+}
+
+
+@register_flow_action('format_labels')
+def format_labels(contact, context: dict, params: dict) -> dict:
+    """
+    Converts raw interactive IDs to human-readable labels for
+    confirmation/summary messages.
+
+    Expected params:
+        - variables: list of context variable names to format
+                     (default: all known label maps)
+
+    For each variable, creates a '_display' suffixed version:
+        e.g. payment_preference='cash' → payment_preference_display='💵 Cash / Full Payment'
+
+    Also overwrites the original variable so {{payment_preference}}
+    renders the friendly label directly in templates.
+    """
+    variables = params.get('variables', list(LABEL_MAPS.keys()))
+
+    for var_name in variables:
+        raw_value = context.get(var_name, '')
+        label_map = LABEL_MAPS.get(var_name, {})
+        display_value = label_map.get(str(raw_value), str(raw_value))
+
+        # Store both the display version and overwrite the original
+        context[f'{var_name}_display'] = display_value
+        context[var_name] = display_value
+
+    logger.info(f"format_labels: Formatted {len(variables)} variable(s)")
     return context

@@ -217,13 +217,31 @@ CONTACT_SUPPORT_FLOW = {
             },
             "transitions": [
                 {
+                    "to_step": "format_support_labels",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },        # ── Format raw IDs to readable labels ──────────────────────
+        {
+            "name": "format_support_labels",
+            "type": "action",
+            "config": {
+                "actions_to_run": [{
+                    "action_type": "format_labels",
+                    "parameters": {
+                        "variables": ["support_category", "contact_method"]
+                    }
+                }]
+            },
+            "transitions": [
+                {
                     "to_step": "confirm_support_request",
                     "condition_config": {"type": "auto"},
                     "priority": 1
                 }
             ]
-        },
-        # ── Confirmation with interactive buttons ──────────────────────
+        },        # ── Confirmation with interactive buttons ──────────────────────
         {
             "name": "confirm_support_request",
             "type": "question",

@@ -152,7 +152,7 @@ SOLAR_PACKAGES_FLOW = {
             },
             "transitions": [
                 {
-                    "to_step": "switch_to_install",
+                    "to_step": "confirm_book_install",
                     "condition_config": {
                         "type": "interactive_reply_id_equals",
                         "value": "book_install"
@@ -175,6 +175,54 @@ SOLAR_PACKAGES_FLOW = {
             ]
         },
         # ── Route to installation booking flow ─────────────────────────
+        {
+            "name": "confirm_book_install",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "interactive",
+                    "interactive": {
+                        "type": "button",
+                        "header": {"type": "text", "text": "📋 Confirm Booking"},
+                        "body": {
+                            "text": "You're about to book an installation for:\n\n"
+                                   "━━━━━━━━━━━━━━━━━━━━\n"
+                                   "📦 *Package:* {{package_name}}\n"
+                                   "💰 *Price:* {{package_price}}\n"
+                                   "⚡ *System:* {{package_system_size}}\n"
+                                   "💳 *Payment:* {{package_payment_label}}\n"
+                                   "━━━━━━━━━━━━━━━━━━━━\n\n"
+                                   "Would you like to proceed?"
+                        },
+                        "action": {
+                            "buttons": [
+                                {"type": "reply", "reply": {"id": "yes_book", "title": "✅ Yes, Book"}},
+                                {"type": "reply", "reply": {"id": "no_back", "title": "🔙 Go Back"}}
+                            ]
+                        }
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "interactive_id",
+                    "save_to_variable": "book_confirmation"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "switch_to_install",
+                    "condition_config": {
+                        "type": "interactive_reply_id_equals",
+                        "value": "yes_book"
+                    },
+                    "priority": 1
+                },
+                {
+                    "to_step": "build_list",
+                    "condition_config": {"type": "always_true"},
+                    "priority": 2
+                }
+            ]
+        },
         {
             "name": "switch_to_install",
             "type": "switch_flow",

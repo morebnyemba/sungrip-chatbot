@@ -247,13 +247,31 @@ SOLAR_QUOTE_FLOW = {
             },
             "transitions": [
                 {
+                    "to_step": "format_quote_labels",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },        # ── Format raw IDs to readable labels ──────────────────────
+        {
+            "name": "format_quote_labels",
+            "type": "action",
+            "config": {
+                "actions_to_run": [{
+                    "action_type": "format_labels",
+                    "parameters": {
+                        "variables": ["roof_type", "property_type"]
+                    }
+                }]
+            },
+            "transitions": [
+                {
                     "to_step": "confirm_quote_request",
                     "condition_config": {"type": "auto"},
                     "priority": 1
                 }
             ]
-        },
-        # ── Confirmation with interactive buttons ──────────────────────
+        },        # ── Confirmation with interactive buttons ──────────────────────
         {
             "name": "confirm_quote_request",
             "type": "question",

@@ -342,7 +342,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                     }
                 },
                 {
-                    "to_step": "confirm_installation",
+                    "to_step": "format_install_labels",
                     "priority": 2,
                     "condition_config": {"type": "always_true"}
                 }
@@ -365,13 +365,31 @@ INSTALLATION_SCHEDULING_FLOW = {
             },
             "transitions": [
                 {
+                    "to_step": "format_install_labels",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },        # ── Format raw IDs to readable labels ──────────────────────
+        {
+            "name": "format_install_labels",
+            "type": "action",
+            "config": {
+                "actions_to_run": [{
+                    "action_type": "format_labels",
+                    "parameters": {
+                        "variables": ["payment_preference", "system_size", "time_preference"]
+                    }
+                }]
+            },
+            "transitions": [
+                {
                     "to_step": "confirm_installation",
                     "condition_config": {"type": "auto"},
                     "priority": 1
                 }
             ]
-        },
-        # ── Confirmation ───────────────────────────────────────────────
+        },        # ── Confirmation ───────────────────────────────────────────────
         {
             "name": "confirm_installation",
             "type": "question",

@@ -23,7 +23,7 @@ from products.models import SolarPackage
 PACKAGES = [
     # ──── Cash on Delivery Packages ────────────────────────────────────
     {
-        "name": "3.5kVA Solar (Cash)",
+        "name": "3.5kVA Solar System",
         "description": (
             "Entry-level home solar system ideal for small households. "
             "Supply and fix — professional installation included. "
@@ -61,7 +61,7 @@ PACKAGES = [
         ],
     },
     {
-        "name": "4.2kVA Solar (Cash)",
+        "name": "4.2kVA Solar System",
         "description": (
             "Mid-range home solar system with camera support. "
             "Supply and fix — professional installation included. "
@@ -100,7 +100,7 @@ PACKAGES = [
         ],
     },
     {
-        "name": "6.2kVA Solar (Cash)",
+        "name": "6.2kVA Solar System",
         "description": (
             "Heavy-duty home solar system for large households. "
             "Powers all lights, plugs, entertainment, and multiple fridges. "
@@ -137,7 +137,7 @@ PACKAGES = [
     },
     # ──── 6-Month Payment Plan Packages ────────────────────────────────
     {
-        "name": "3.5kVA Solar (6-Mo)",
+        "name": "3.5kVA Solar System",
         "description": (
             "Entry-level home solar system with flexible 6-month payment plan. "
             "Supply and fix — professional installation included. "
@@ -176,7 +176,7 @@ PACKAGES = [
         ],
     },
     {
-        "name": "4.2kVA Solar (6-Mo)",
+        "name": "4.2kVA Solar System",
         "description": (
             "Mid-range home solar system with camera support and flexible "
             "6-month payment plan. Supply and fix — professional installation "
@@ -215,7 +215,7 @@ PACKAGES = [
         ],
     },
     {
-        "name": "6.2kVA Solar (6-Mo)",
+        "name": "6.2kVA Solar System",
         "description": (
             "Heavy-duty home solar system for large households with flexible "
             "6-month payment plan. Powers all lights, plugs, entertainment, "
@@ -273,21 +273,28 @@ class Command(BaseCommand):
         updated = 0
 
         for pkg_data in PACKAGES:
-            # Use name as the unique lookup key
+            # Use name + payment_type as unique lookup key
+            # (same system size appears under both cash and installment)
             name = pkg_data['name']
-            defaults = {k: v for k, v in pkg_data.items() if k != 'name'}
+            payment_type = pkg_data.get('payment_type', 'cash')
+            defaults = {
+                k: v for k, v in pkg_data.items()
+                if k not in ('name', 'payment_type')
+            }
 
             obj, was_created = SolarPackage.objects.update_or_create(
                 name=name,
+                payment_type=payment_type,
                 defaults=defaults,
             )
 
+            label = "Cash" if payment_type == "cash" else "Plan"
             if was_created:
                 created += 1
-                self.stdout.write(f"  ✅ Created: {obj.name} — ${obj.total_price:,.0f}")
+                self.stdout.write(f"  ✅ Created: {obj.name} ({label}) — ${obj.total_price:,.0f}")
             else:
                 updated += 1
-                self.stdout.write(f"  🔄 Updated: {obj.name} — ${obj.total_price:,.0f}")
+                self.stdout.write(f"  🔄 Updated: {obj.name} ({label}) — ${obj.total_price:,.0f}")
 
         self.stdout.write(
             self.style.SUCCESS(
