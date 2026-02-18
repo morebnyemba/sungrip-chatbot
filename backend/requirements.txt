@@ -24,6 +24,9 @@ requests==2.31.0
 cryptography==42.0.4  # Updated from 41.0.7 - Security patches for NULL pointer dereference and timing oracle attack
 pydantic==2.5.3  # Data validation and settings management using Python type annotations
 
+# Templating
+Jinja2>=3.1.2  # Used by flows engine for dynamic message rendering
+
 # AI Integration
 google-generativeai==0.3.1
 
