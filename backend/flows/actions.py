@@ -402,7 +402,14 @@ def build_packages_interactive_list(contact, context: dict, params: dict) -> dic
             row_id = f"pkg_{pkg.pk}"
             popular = " ⭐" if pkg.is_popular else ""
 
-            # Build description with payment info
+            # Build title — WhatsApp max is 24 chars
+            title = f"{pkg.name}{popular}"
+            if len(title) > 24:
+                # Truncate name to fit, keeping the popular star
+                max_name = 24 - len(popular)
+                title = f"{pkg.name[:max_name]}{popular}"
+
+            # Build description — WhatsApp max is 72 chars
             if pkg.payment_type == 'installment' and pkg.installment_months:
                 monthly = pkg.total_price / pkg.installment_months
                 desc = f"{pkg.system_size_kw}kW · ${pkg.total_price:,.0f} (${monthly:,.0f}/mo)"
@@ -411,8 +418,8 @@ def build_packages_interactive_list(contact, context: dict, params: dict) -> dic
 
             row = {
                 "id": row_id,
-                "title": f"{pkg.name}{popular}",
-                "description": desc
+                "title": title,
+                "description": desc[:72]
             }
             id_map[row_id] = pkg.pk
 

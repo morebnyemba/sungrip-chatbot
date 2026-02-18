@@ -23,7 +23,7 @@ from products.models import SolarPackage
 PACKAGES = [
     # ──── Cash on Delivery Packages ────────────────────────────────────
     {
-        "name": "3.5 kVA Solar System (Cash)",
+        "name": "3.5kVA Solar (Cash)",
         "description": (
             "Entry-level home solar system ideal for small households. "
             "Supply and fix — professional installation included. "
@@ -61,7 +61,7 @@ PACKAGES = [
         ],
     },
     {
-        "name": "4.2 kVA Solar System (Cash)",
+        "name": "4.2kVA Solar (Cash)",
         "description": (
             "Mid-range home solar system with camera support. "
             "Supply and fix — professional installation included. "
@@ -100,7 +100,7 @@ PACKAGES = [
         ],
     },
     {
-        "name": "6.2 kVA Solar System (Cash)",
+        "name": "6.2kVA Solar (Cash)",
         "description": (
             "Heavy-duty home solar system for large households. "
             "Powers all lights, plugs, entertainment, and multiple fridges. "
@@ -137,7 +137,7 @@ PACKAGES = [
     },
     # ──── 6-Month Payment Plan Packages ────────────────────────────────
     {
-        "name": "3.5 kVA Solar System (6-Month Plan)",
+        "name": "3.5kVA Solar (6-Mo)",
         "description": (
             "Entry-level home solar system with flexible 6-month payment plan. "
             "Supply and fix — professional installation included. "
@@ -176,7 +176,7 @@ PACKAGES = [
         ],
     },
     {
-        "name": "4.2 kVA Solar System (6-Month Plan)",
+        "name": "4.2kVA Solar (6-Mo)",
         "description": (
             "Mid-range home solar system with camera support and flexible "
             "6-month payment plan. Supply and fix — professional installation "
@@ -215,7 +215,7 @@ PACKAGES = [
         ],
     },
     {
-        "name": "6.2 kVA Solar System (6-Month Plan)",
+        "name": "6.2kVA Solar (6-Mo)",
         "description": (
             "Heavy-duty home solar system for large households with flexible "
             "6-month payment plan. Powers all lights, plugs, entertainment, "
