@@ -1,20 +1,21 @@
 # backend/flows/definitions/solar_quote_flow.py
 
 """
-Solar quote request flow definition.
+Solar quote request conversational flow.
 
-Guides customers through the process of requesting a solar system quote.
-Supports WhatsApp interactive flow with legacy message-based fallback.
+Guides customers through requesting a solar system quote.
+Supports WhatsApp interactive flow with a polished legacy fallback
+that uses interactive lists / buttons wherever possible.
 """
 
 SOLAR_QUOTE_FLOW = {
     "name": "solar_quote_request",
     "friendly_name": "Solar Quote Request",
-    "description": "Guides customers through solar system quote request process",
+    "description": "Guides customers through the solar system quote request process",
     "is_active": True,
     "trigger_keywords": ["quote", "price", "how much", "cost", "solar system"],
     "steps": [
-        # WhatsApp Flow integration entry point
+        # ── WhatsApp Flow integration entry point ──────────────────────
         {
             "name": "check_whatsapp_flow",
             "is_entry_point": True,
@@ -44,7 +45,7 @@ SOLAR_QUOTE_FLOW = {
                 }
             ]
         },
-        # WhatsApp Flow path
+        # ── WhatsApp Flow path ─────────────────────────────────────────
         {
             "name": "send_whatsapp_flow",
             "type": "action",
@@ -79,7 +80,7 @@ SOLAR_QUOTE_FLOW = {
                 }
             ]
         },
-        # Legacy message-based flow path
+        # ── Legacy conversational fallback ─────────────────────────────
         {
             "name": "fallback_welcome",
             "type": "send_message",
@@ -107,7 +108,8 @@ SOLAR_QUOTE_FLOW = {
                 "message_config": {
                     "message_type": "text",
                     "text": {
-                        "body": "What is your average monthly electricity bill in USD?"
+                        "body": "💰 What is your *average monthly electricity bill* in USD?\n\n"
+                               "_e.g. 150_"
                     }
                 },
                 "reply_config": {
@@ -133,7 +135,8 @@ SOLAR_QUOTE_FLOW = {
                     "interactive": {
                         "type": "list",
                         "body": {
-                            "text": "🏠 What type of roof do you have?\n\nThis helps us determine the best mounting system for your solar panels."
+                            "text": "🏠 What type of roof do you have?\n\n"
+                                   "This helps us determine the best mounting system for your solar panels."
                         },
                         "footer": {
                             "text": "Select your roof type"
@@ -162,6 +165,39 @@ SOLAR_QUOTE_FLOW = {
             },
             "transitions": [
                 {
+                    "to_step": "ask_property_type",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "ask_property_type",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "interactive",
+                    "interactive": {
+                        "type": "button",
+                        "body": {
+                            "text": "🏘️ What best describes your property?"
+                        },
+                        "action": {
+                            "buttons": [
+                                {"type": "reply", "reply": {"id": "residential", "title": "🏠 Residential"}},
+                                {"type": "reply", "reply": {"id": "commercial", "title": "🏢 Commercial"}},
+                                {"type": "reply", "reply": {"id": "industrial", "title": "🏭 Industrial"}}
+                            ]
+                        }
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "interactive_id",
+                    "save_to_variable": "property_type"
+                }
+            },
+            "transitions": [
+                {
                     "to_step": "ask_location",
                     "condition_config": {"type": "auto"},
                     "priority": 1
@@ -175,7 +211,8 @@ SOLAR_QUOTE_FLOW = {
                 "message_config": {
                     "message_type": "text",
                     "text": {
-                        "body": "What is your location/city?"
+                        "body": "📍 What city or town are you located in?\n\n"
+                               "_e.g. Harare, Bulawayo, Mutare_"
                     }
                 },
                 "reply_config": {
@@ -191,7 +228,6 @@ SOLAR_QUOTE_FLOW = {
                 }
             ]
         },
-        # Location picker step
         {
             "name": "ask_location_pin",
             "type": "question",
@@ -199,8 +235,9 @@ SOLAR_QUOTE_FLOW = {
                 "message_config": {
                     "message_type": "text",
                     "text": {
-                        "body": "Please send your location by using WhatsApp's location feature "
-                               "(📍 Location button). This helps our team find your site easily."
+                        "body": "📌 Please share your *location pin* using WhatsApp's location feature.\n\n"
+                               "Tap the 📎 (attach) button → 📍 Location → Send.\n\n"
+                               "This helps our team plan the site assessment."
                     }
                 },
                 "reply_config": {
@@ -210,33 +247,13 @@ SOLAR_QUOTE_FLOW = {
             },
             "transitions": [
                 {
-                    "to_step": "calculate_quote",
-                    "condition_config": {"type": "auto"},
-                    "priority": 1
-                }
-            ]
-        },
-        {
-            "name": "calculate_quote",
-            "type": "action",
-            "config": {
-                "actions_to_run": [{
-                    "action_type": "update_context",
-                    "parameters": {
-                        "estimated_system_size": 5.0,
-                        "estimated_cost": 5000.0
-                    }
-                }]
-            },
-            "transitions": [
-                {
                     "to_step": "confirm_quote_request",
                     "condition_config": {"type": "auto"},
                     "priority": 1
                 }
             ]
         },
-        # Confirmation step with interactive buttons
+        # ── Confirmation with interactive buttons ──────────────────────
         {
             "name": "confirm_quote_request",
             "type": "question",
@@ -245,15 +262,16 @@ SOLAR_QUOTE_FLOW = {
                     "message_type": "interactive",
                     "interactive": {
                         "type": "button",
-                        "header": {"type": "text", "text": "Review Quote Request"},
+                        "header": {"type": "text", "text": "📋 Review Quote Request"},
                         "body": {
-                            "text": "📋 *Solar Quote Request*\n\n"
+                            "text": "Please confirm the details below:\n\n"
                                    "━━━━━━━━━━━━━━━━━━━━\n"
-                                   "💰 *Monthly Bill:*\n${{monthly_bill}}\n\n"
-                                   "🏠 *Roof Type:*\n{{roof_type}}\n\n"
-                                   "📍 *Location:*\n{{location}}\n"
+                                   "💰 *Monthly Bill:* ${{monthly_bill}}\n"
+                                   "🏠 *Roof Type:* {{roof_type}}\n"
+                                   "🏘️ *Property:* {{property_type}}\n"
+                                   "📍 *Location:* {{location}}\n"
                                    "━━━━━━━━━━━━━━━━━━━━\n\n"
-                                   "Confirm to submit your quote request."
+                                   "Tap *Confirm* to submit your request."
                         },
                         "action": {
                             "buttons": [
@@ -284,18 +302,22 @@ SOLAR_QUOTE_FLOW = {
                 }
             ]
         },
+        # ── Success & closing ──────────────────────────────────────────
         {
             "name": "provide_quote",
             "type": "send_message",
             "config": {
                 "message_type": "text",
                 "text": {
-                    "body": "✅ Quote request submitted!\n\n"
-                           "Based on your monthly bill of ${{monthly_bill}}, I recommend a solar system.\n\n"
-                           "📍 Location: {{location}}\n"
-                           "🏠 Roof Type: {{roof_type}}\n\n"
-                           "Our sales team will contact you shortly with a detailed quote. "
-                           "Is there anything else you'd like to know?"
+                    "body": "✅ *Quote request submitted!*\n\n"
+                           "Thank you, {{customer_name}}! Here's a summary:\n\n"
+                           "💰 Monthly bill: ${{monthly_bill}}\n"
+                           "🏠 Roof: {{roof_type}}\n"
+                           "📍 Location: {{location}}\n\n"
+                           "Our solar consultant will contact you within "
+                           "*24 hours* with a detailed, personalised quote.\n\n"
+                           "📞 Need it sooner? Call us at *+263 123 456 789*\n\n"
+                           "Type *menu* to return to the main menu."
                 }
             },
             "transitions": [
@@ -312,9 +334,9 @@ SOLAR_QUOTE_FLOW = {
             "config": {
                 "message_type": "text",
                 "text": {
-                    "body": "❌ Quote request cancelled.\n\n"
-                           "No worries! If you change your mind, just type 'quote' to start again.\n"
-                           "Type 'menu' to return to the main menu."
+                    "body": "❌ *Quote request cancelled.*\n\n"
+                           "No worries! You can start again anytime by typing *quote*.\n"
+                           "Type *menu* to return to the main menu."
                 }
             },
             "transitions": [

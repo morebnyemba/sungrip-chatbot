@@ -1,10 +1,11 @@
 # backend/flows/definitions/installation_scheduling_flow.py
 
 """
-Installation scheduling flow definition.
+Installation scheduling conversational flow.
 
-Schedules solar system installation appointments for customers.
-Supports WhatsApp interactive flow with legacy message-based fallback.
+Books solar system installation appointments for customers.
+Supports WhatsApp interactive flow with a polished legacy fallback
+that collects payment preference, booking details, and location.
 """
 
 INSTALLATION_SCHEDULING_FLOW = {
@@ -12,9 +13,9 @@ INSTALLATION_SCHEDULING_FLOW = {
     "friendly_name": "Installation Scheduling",
     "description": "Schedules solar system installation appointments",
     "is_active": True,
-    "trigger_keywords": ["schedule", "installation", "appointment", "install"],
+    "trigger_keywords": ["schedule", "installation", "appointment", "install", "book"],
     "steps": [
-        # WhatsApp Flow integration entry point
+        # ── WhatsApp Flow integration entry point ──────────────────────
         {
             "name": "check_whatsapp_flow",
             "is_entry_point": True,
@@ -44,7 +45,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                 }
             ]
         },
-        # WhatsApp Flow path
+        # ── WhatsApp Flow path ─────────────────────────────────────────
         {
             "name": "send_whatsapp_flow",
             "type": "action",
@@ -79,17 +80,115 @@ INSTALLATION_SCHEDULING_FLOW = {
                 }
             ]
         },
-        # Legacy message-based flow path
+        # ── Legacy conversational fallback ─────────────────────────────
         {
             "name": "fallback_welcome",
             "type": "send_message",
             "config": {
                 "message_type": "text",
                 "text": {
-                    "body": "📅 *Installation Scheduling*\n\n"
-                           "Let's get your solar system installation booked! "
-                           "I'll need a few details to find the best time for you.\n\n"
+                    "body": "📅 *Book Your Installation*\n\n"
+                           "Great choice! Let's get your solar system "
+                           "installation booked. I'll collect a few details "
+                           "and our team will confirm within 24 hours.\n\n"
                            "This takes less than 2 minutes ⏱️"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "ask_payment_preference",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        # ── Payment preference ─────────────────────────────────────────
+        {
+            "name": "ask_payment_preference",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "interactive",
+                    "interactive": {
+                        "type": "button",
+                        "header": {"type": "text", "text": "💳 Payment Method"},
+                        "body": {
+                            "text": "How would you like to pay?\n\n"
+                                   "💵 *Cash* — Pay on delivery & installation\n"
+                                   "📆 *6-Month Plan* — Spread cost over 6 months"
+                        },
+                        "action": {
+                            "buttons": [
+                                {"type": "reply", "reply": {"id": "cash", "title": "💵 Cash / Full"}},
+                                {"type": "reply", "reply": {"id": "installment_6", "title": "📆 6-Month Plan"}}
+                            ]
+                        }
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "interactive_id",
+                    "save_to_variable": "payment_preference"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "ask_system_size",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        # ── System size selection ──────────────────────────────────────
+        {
+            "name": "ask_system_size",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "interactive",
+                    "interactive": {
+                        "type": "list",
+                        "body": {
+                            "text": "⚡ Which system would you like installed?\n\n"
+                                   "Select the size that matches your household needs."
+                        },
+                        "footer": {
+                            "text": "Prices in USD · Installation included"
+                        },
+                        "action": {
+                            "button": "Select System",
+                            "sections": [
+                                {
+                                    "title": "Available Systems",
+                                    "rows": [
+                                        {
+                                            "id": "3.5kva",
+                                            "title": "⚡ 3.5 kVA System",
+                                            "description": "Small home · Fridge, TV, lights, 0.5HP pump"
+                                        },
+                                        {
+                                            "id": "4.2kva",
+                                            "title": "⚡ 4.2 kVA System",
+                                            "description": "Medium home · + Cameras, 0.75HP pump"
+                                        },
+                                        {
+                                            "id": "6.2kva",
+                                            "title": "⚡ 6.2 kVA System",
+                                            "description": "Large home · 3 fridges, 1.5HP pump"
+                                        },
+                                        {
+                                            "id": "not_sure",
+                                            "title": "🤔 Not Sure Yet",
+                                            "description": "Our team will advise on site"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "interactive_id",
+                    "save_to_variable": "system_size"
                 }
             },
             "transitions": [
@@ -100,6 +199,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                 }
             ]
         },
+        # ── Date & time ────────────────────────────────────────────────
         {
             "name": "ask_preferred_date",
             "type": "question",
@@ -107,7 +207,8 @@ INSTALLATION_SCHEDULING_FLOW = {
                 "message_config": {
                     "message_type": "text",
                     "text": {
-                        "body": "What date would you prefer for the installation? (e.g., Monday, Next Week, etc.)"
+                        "body": "📅 When would you like the installation?\n\n"
+                               "_e.g. Monday, Next week, 15 March_"
                     }
                 },
                 "reply_config": {
@@ -132,7 +233,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                     "interactive": {
                         "type": "button",
                         "body": {
-                            "text": "What time of day works best for the installation?"
+                            "text": "🕐 What time of day works best?"
                         },
                         "action": {
                             "buttons": [
@@ -155,6 +256,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                 }
             ]
         },
+        # ── Address & location ─────────────────────────────────────────
         {
             "name": "ask_installation_address",
             "type": "question",
@@ -162,7 +264,9 @@ INSTALLATION_SCHEDULING_FLOW = {
                 "message_config": {
                     "message_type": "text",
                     "text": {
-                        "body": "Please provide your installation address:"
+                        "body": "🏠 Please provide the *full installation address*:\n\n"
+                               "_e.g. 42 Solar Drive, Borrowdale, Harare_\n\n"
+                               "ℹ️ Outside Harare — transport charges may apply."
                     }
                 },
                 "reply_config": {
@@ -178,7 +282,6 @@ INSTALLATION_SCHEDULING_FLOW = {
                 }
             ]
         },
-        # Location picker step
         {
             "name": "ask_location_pin",
             "type": "question",
@@ -186,13 +289,78 @@ INSTALLATION_SCHEDULING_FLOW = {
                 "message_config": {
                     "message_type": "text",
                     "text": {
-                        "body": "Please send your location by using WhatsApp's location feature "
-                               "(📍 Location button). This helps our team find your site easily."
+                        "body": "📌 Please share your *location pin* so our crew can find you.\n\n"
+                               "Tap 📎 → 📍 Location → Send"
                     }
                 },
                 "reply_config": {
                     "expected_type": "location",
                     "save_to_variable": "location_pin"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "ask_additional_notes",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        # ── Optional notes ─────────────────────────────────────────────
+        {
+            "name": "ask_additional_notes",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "interactive",
+                    "interactive": {
+                        "type": "button",
+                        "body": {
+                            "text": "📝 Any additional notes for the installation team?\n\n"
+                                   "_e.g. Gate access, roof type, special requirements_"
+                        },
+                        "action": {
+                            "buttons": [
+                                {"type": "reply", "reply": {"id": "no_notes", "title": "➡️ Skip"}},
+                                {"type": "reply", "reply": {"id": "add_notes", "title": "📝 Add Notes"}}
+                            ]
+                        }
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "interactive_id",
+                    "save_to_variable": "notes_choice"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "collect_notes",
+                    "priority": 1,
+                    "condition_config": {
+                        "type": "interactive_reply_id_equals",
+                        "value": "add_notes"
+                    }
+                },
+                {
+                    "to_step": "confirm_installation",
+                    "priority": 2,
+                    "condition_config": {"type": "always_true"}
+                }
+            ]
+        },
+        {
+            "name": "collect_notes",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "text",
+                    "text": {
+                        "body": "📝 Type your notes below:"
+                    }
+                },
+                "reply_config": {
+                    "expected_type": "text",
+                    "save_to_variable": "additional_notes"
                 }
             },
             "transitions": [
@@ -203,7 +371,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                 }
             ]
         },
-        # Confirmation step with interactive buttons
+        # ── Confirmation ───────────────────────────────────────────────
         {
             "name": "confirm_installation",
             "type": "question",
@@ -212,15 +380,17 @@ INSTALLATION_SCHEDULING_FLOW = {
                     "message_type": "interactive",
                     "interactive": {
                         "type": "button",
-                        "header": {"type": "text", "text": "Review Installation Request"},
+                        "header": {"type": "text", "text": "📋 Booking Summary"},
                         "body": {
-                            "text": "📋 *Installation Scheduling*\n\n"
+                            "text": "Please review your installation booking:\n\n"
                                    "━━━━━━━━━━━━━━━━━━━━\n"
-                                   "📅 *Preferred Date:*\n{{preferred_date}}\n\n"
-                                   "🕐 *Time Preference:*\n{{time_preference}}\n\n"
-                                   "🏠 *Address:*\n{{installation_address}}\n"
+                                   "⚡ *System:* {{system_size}}\n"
+                                   "💳 *Payment:* {{payment_preference}}\n"
+                                   "📅 *Date:* {{preferred_date}}\n"
+                                   "🕐 *Time:* {{time_preference}}\n"
+                                   "🏠 *Address:* {{installation_address}}\n"
                                    "━━━━━━━━━━━━━━━━━━━━\n\n"
-                                   "Confirm to submit your installation request."
+                                   "Tap *Confirm* to submit your booking."
                         },
                         "action": {
                             "buttons": [
@@ -251,17 +421,24 @@ INSTALLATION_SCHEDULING_FLOW = {
                 }
             ]
         },
+        # ── Success ────────────────────────────────────────────────────
         {
             "name": "confirm_scheduling",
             "type": "send_message",
             "config": {
                 "message_type": "text",
                 "text": {
-                    "body": "✅ Installation request submitted!\n\n"
-                           "Thank you! I've noted your preference for {{preferred_date}} ({{time_preference}}).\n"
-                           "📍 Address: {{installation_address}}\n\n"
-                           "Our installation team will contact you within 24 hours to confirm the exact time.\n\n"
-                           "Type 'menu' to return to the main menu."
+                    "body": "✅ *Installation Booked!*\n\n"
+                           "Thank you, {{customer_name}}! Here's your booking:\n\n"
+                           "⚡ System: {{system_size}}\n"
+                           "💳 Payment: {{payment_preference}}\n"
+                           "📅 Date: {{preferred_date}}\n"
+                           "🕐 Time: {{time_preference}}\n"
+                           "🏠 Address: {{installation_address}}\n\n"
+                           "Our installation team will call you within *24 hours* "
+                           "to confirm the exact schedule.\n\n"
+                           "📞 WhatsApp: 0782 233 111 / 0777 139 159\n\n"
+                           "Type *menu* to return to the main menu."
                 }
             },
             "transitions": [
@@ -278,9 +455,9 @@ INSTALLATION_SCHEDULING_FLOW = {
             "config": {
                 "message_type": "text",
                 "text": {
-                    "body": "❌ Installation request cancelled.\n\n"
-                           "No worries! If you change your mind, just type 'schedule' to start again.\n"
-                           "Type 'menu' to return to the main menu."
+                    "body": "❌ *Booking cancelled.*\n\n"
+                           "No worries! You can reschedule anytime by typing *schedule*.\n"
+                           "Type *menu* to return to the main menu."
                 }
             },
             "transitions": [

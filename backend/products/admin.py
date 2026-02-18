@@ -26,8 +26,8 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(SolarPackage)
 class SolarPackageAdmin(admin.ModelAdmin):
-    list_display = ('name', 'system_size_kw', 'recommended_for', 'total_price', 'is_active', 'is_popular', 'display_order')
-    list_filter = ('recommended_for', 'is_active', 'is_popular', 'installation_included')
+    list_display = ('name', 'system_size_kw', 'recommended_for', 'total_price', 'payment_type', 'installment_months', 'is_active', 'is_popular', 'display_order')
+    list_filter = ('recommended_for', 'payment_type', 'is_active', 'is_popular', 'installation_included')
     search_fields = ('name', 'description')
     list_editable = ('total_price', 'is_active', 'is_popular', 'display_order')
     readonly_fields = ('created_at', 'updated_at')
@@ -39,8 +39,11 @@ class SolarPackageAdmin(admin.ModelAdmin):
         ('System Details', {
             'fields': ('system_size_kw', 'recommended_for')
         }),
-        ('Pricing', {
-            'fields': ('total_price', 'installation_included')
+        ('Pricing & Payment', {
+            'fields': ('total_price', 'payment_type', 'installment_months', 'installation_included')
+        }),
+        ('Equipment & Powers', {
+            'fields': ('equipment_summary', 'powers')
         }),
         ('Features & Status', {
             'fields': ('features', 'is_active', 'is_popular', 'display_order')

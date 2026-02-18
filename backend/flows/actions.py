@@ -356,3 +356,244 @@ def fetch_solar_packages(contact, context: dict, params: dict) -> dict:
         context['packages_count'] = 0
 
     return context
+
+
+@register_flow_action('build_packages_interactive_list')
+def build_packages_interactive_list(contact, context: dict, params: dict) -> dict:
+    """
+    Queries active SolarPackages from the DB and builds a WhatsApp interactive
+    list message payload grouped by payment type, storing it in a context
+    variable so the flow engine's ``send_dynamic_message`` action type can
+    dispatch it.
+
+    Sets context variables:
+        - _packages_list_msg: Complete interactive list message config
+        - _package_id_map: Dict mapping interactive row IDs to package PKs
+        - packages_count: Number of packages found
+    """
+    from products.models import SolarPackage
+
+    try:
+        packages = SolarPackage.objects.filter(is_active=True).order_by(
+            'display_order', 'system_size_kw'
+        )
+
+        if not packages.exists():
+            context['_packages_list_msg'] = {
+                'message_type': 'text',
+                'text': {
+                    'body': (
+                        "We're currently updating our package offerings.\n"
+                        "Please contact our team for the latest pricing.\n\n"
+                        "Type 'menu' to return to the main menu."
+                    )
+                }
+            }
+            context['packages_count'] = 0
+            context['_package_id_map'] = {}
+            return context
+
+        # Group packages by payment type into sections
+        cash_rows = []
+        plan_rows = []
+        id_map = {}
+
+        for pkg in packages:
+            row_id = f"pkg_{pkg.pk}"
+            popular = " ⭐" if pkg.is_popular else ""
+
+            # Build description with payment info
+            if pkg.payment_type == 'installment' and pkg.installment_months:
+                monthly = pkg.total_price / pkg.installment_months
+                desc = f"{pkg.system_size_kw}kW · ${pkg.total_price:,.0f} (${monthly:,.0f}/mo)"
+            else:
+                desc = f"{pkg.system_size_kw}kW · ${pkg.total_price:,.0f}"
+
+            row = {
+                "id": row_id,
+                "title": f"{pkg.name}{popular}",
+                "description": desc
+            }
+            id_map[row_id] = pkg.pk
+
+            if pkg.payment_type == 'installment':
+                plan_rows.append(row)
+            else:
+                cash_rows.append(row)
+
+        sections = []
+        if cash_rows:
+            sections.append({
+                'title': '💵 Cash on Delivery',
+                'rows': cash_rows
+            })
+        if plan_rows:
+            sections.append({
+                'title': '📆 6-Month Payment Plan',
+                'rows': plan_rows
+            })
+
+        context['_packages_list_msg'] = {
+            'message_type': 'interactive',
+            'interactive': {
+                'type': 'list',
+                'header': {'type': 'text', 'text': '☀️ Sungrip Solar Packages'},
+                'body': {
+                    'text': (
+                        "Browse our solar energy packages below.\n\n"
+                        "💵 *Cash* — pay on delivery & installation\n"
+                        "📆 *6-Month Plan* — spread the cost\n\n"
+                        "Each package includes panels, inverter, battery "
+                        "& professional installation.\n\n"
+                        "Tap a package for full details 👇"
+                    )
+                },
+                'footer': {'text': 'Prices in USD · Supply & Fix included'},
+                'action': {
+                    'button': '📦 View Packages',
+                    'sections': sections
+                }
+            }
+        }
+        context['_package_id_map'] = id_map
+        context['packages_count'] = packages.count()
+        logger.info(
+            f"build_packages_interactive_list: Built list with "
+            f"{packages.count()} packages in {len(sections)} sections"
+        )
+
+    except Exception as e:
+        logger.error(
+            f"build_packages_interactive_list error: {e}", exc_info=True
+        )
+        context['_packages_list_msg'] = {
+            'message_type': 'text',
+            'text': {
+                'body': (
+                    "Sorry, we could not load our packages right now.\n"
+                    "Please try again later or type 'menu'."
+                )
+            }
+        }
+        context['_package_id_map'] = {}
+        context['packages_count'] = 0
+
+    return context
+
+
+@register_flow_action('fetch_package_details')
+def fetch_package_details(contact, context: dict, params: dict) -> dict:
+    """
+    Looks up a single SolarPackage by the interactive list selection and
+    formats its full details for display.
+
+    Expected params:
+        - selection_variable: Context variable holding the selected row ID
+                              (default: 'selected_package')
+
+    Uses context variables:
+        - _package_id_map: Mapping of row IDs → PKs (set by build_packages_interactive_list)
+
+    Sets context variables:
+        - package_name: Package name
+        - package_detail_text: Formatted detail text for display
+        - package_found: Boolean indicating whether the package was found
+    """
+    from products.models import SolarPackage
+
+    selection_var = params.get('selection_variable', 'selected_package')
+    selected_id = context.get(selection_var, '')
+    id_map = context.get('_package_id_map', {})
+
+    try:
+        pkg_pk = id_map.get(selected_id)
+        if not pkg_pk:
+            context['package_found'] = False
+            context['package_detail_text'] = (
+                "Sorry, I couldn't find that package. "
+                "Please select one from the list."
+            )
+            return context
+
+        pkg = SolarPackage.objects.get(pk=pkg_pk, is_active=True)
+
+        lines = [
+            f"📦 *{pkg.name.upper()}*",
+        ]
+        if pkg.is_popular:
+            lines.append("⭐ MOST POPULAR")
+
+        lines.append("")
+        lines.append(f"⚡ *System Size:* {pkg.system_size_kw} kW")
+        lines.append(f"🏠 *Recommended for:* {pkg.get_recommended_for_display()}")
+
+        # ── Pricing & payment info ──
+        lines.append(f"💰 *Price:* ${pkg.total_price:,.0f} USD")
+        if pkg.payment_type == 'installment' and pkg.installment_months:
+            monthly = pkg.total_price / pkg.installment_months
+            lines.append(f"📆 *Payment Plan:* {pkg.installment_months} months × ${monthly:,.0f}/mo")
+        else:
+            lines.append("💵 *Payment:* Cash on delivery & installation")
+        lines.append("")
+
+        # ── Equipment list (from JSON field first, then M2M fallback) ──
+        if getattr(pkg, 'equipment_summary', None) and pkg.equipment_summary:
+            lines.append("🔧 *Equipment Included:*")
+            for item in pkg.equipment_summary:
+                lines.append(f"  • {item}")
+            lines.append("")
+        else:
+            package_items = pkg.packageitem_set.select_related('product').all()
+            if package_items.exists():
+                lines.append("🔧 *Equipment Included:*")
+                for item in package_items:
+                    lines.append(f"  • {item.quantity}x {item.product.name}")
+                lines.append("")
+
+        # ── What it powers ──
+        if getattr(pkg, 'powers', None) and pkg.powers:
+            lines.append("🔌 *System Powers:*")
+            for load in pkg.powers:
+                lines.append(f"  ⚡ {load}")
+            lines.append("")
+
+        if pkg.installation_included:
+            lines.append("✅ Professional supply & installation included")
+            lines.append("ℹ️ Outside Harare — transport charges may apply")
+
+        # ── Features ──
+        if pkg.features:
+            lines.append("")
+            lines.append("*Key Benefits:*")
+            for feature in pkg.features:
+                lines.append(f"  ✓ {feature}")
+
+        # ── Description ──
+        if pkg.description:
+            lines.append("")
+            lines.append(f"_{pkg.description}_")
+
+        # ── Contact ──
+        lines.append("")
+        lines.append("📞 WhatsApp: 0782 233 111 / 0777 139 159")
+
+        context['package_name'] = pkg.name
+        context['package_detail_text'] = "\n".join(lines)
+        context['package_found'] = True
+        logger.info(f"fetch_package_details: Loaded details for '{pkg.name}'")
+
+    except SolarPackage.DoesNotExist:
+        context['package_found'] = False
+        context['package_detail_text'] = (
+            "Sorry, that package is no longer available. "
+            "Please select another from the list."
+        )
+    except Exception as e:
+        logger.error(f"fetch_package_details error: {e}", exc_info=True)
+        context['package_found'] = False
+        context['package_detail_text'] = (
+            "Sorry, something went wrong loading package details. "
+            "Please try again."
+        )
+
+    return context

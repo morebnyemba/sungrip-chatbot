@@ -278,6 +278,20 @@ def _execute_step_actions(
                         contact, context, resolved_params
                     )
                     actions.extend(wa_actions)
+                elif action_type == 'send_dynamic_message':
+                    # Reads a pre-built message_config from a context variable
+                    # and dispatches it. Allows actions to build dynamic
+                    # interactive lists/buttons and have the engine send them.
+                    msg_var = resolved_params.get('message_variable')
+                    if msg_var and msg_var in context:
+                        dynamic_msg = context[msg_var]
+                        actions.append(_create_typing_action(phone))
+                        actions.append(_create_send_action(phone, dynamic_msg))
+                    else:
+                        logger.warning(
+                            f"send_dynamic_message: variable '{msg_var}' "
+                            f"not found in context"
+                        )
                 else:
                     logger.warning(f"Unknown action type: {action_type}")
         except Exception as e:

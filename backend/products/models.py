@@ -99,6 +99,11 @@ class Product(models.Model):
 class SolarPackage(models.Model):
     """Pre-configured solar system packages"""
     
+    PAYMENT_TYPE_CHOICES = [
+        ('cash', 'Cash on Delivery & Installation'),
+        ('installment', 'Installment Payment Plan'),
+    ]
+    
     name = models.CharField(max_length=200)
     description = models.TextField()
     
@@ -119,12 +124,34 @@ class SolarPackage(models.Model):
         ]
     )
     
-    # Pricing
+    # Pricing & payment
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_type = models.CharField(
+        max_length=20,
+        choices=PAYMENT_TYPE_CHOICES,
+        default='cash',
+        help_text="Cash upfront or installment payment plan"
+    )
+    installment_months = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of months for installment plan (0 = cash)"
+    )
     installation_included = models.BooleanField(default=True)
     
     # Products included (many-to-many with quantities)
     products = models.ManyToManyField(Product, through='PackageItem', related_name='packages')
+    
+    # Equipment summary (quick reference without M2M lookup)
+    equipment_summary = models.JSONField(
+        default=list, blank=True,
+        help_text="List of equipment strings, e.g. ['4 x 450-585W Solar Panels', '100Ah 24V Lithium Battery']"
+    )
+    
+    # What the system powers
+    powers = models.JSONField(
+        default=list, blank=True,
+        help_text="List of appliances/loads the system can power"
+    )
     
     # Features
     features = models.JSONField(default=list, help_text="List of package features")
@@ -143,6 +170,20 @@ class SolarPackage(models.Model):
     
     def __str__(self):
         return f"{self.name} ({self.system_size_kw}kW)"
+
+    @property
+    def monthly_payment(self):
+        """Calculate monthly payment for installment plans."""
+        if self.installment_months and self.installment_months > 0:
+            return self.total_price / self.installment_months
+        return None
+
+    @property
+    def payment_label(self):
+        """Human-readable payment type label."""
+        if self.payment_type == 'installment' and self.installment_months:
+            return f"{self.installment_months}-Month Payment Plan"
+        return "Cash on Delivery & Installation"
 
 
 class PackageItem(models.Model):
