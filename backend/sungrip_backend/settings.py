@@ -78,8 +78,6 @@ LOCAL_APPS = [
     'flows',
 ]
 
-MIGRATION_MODULES = {app: None for app in LOCAL_APPS}
-
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Static files
