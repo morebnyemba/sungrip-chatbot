@@ -1,18 +1,17 @@
 """
 WhatsApp Business API service layer for meta_integration app.
 
-Following conventions from morebnyemba/hanna and morebnyemba/whatsappcrm.
-Handles message sending, webhook processing, and API interactions.
+Aligned with morebnyemba/hanna's meta_integration architecture.
+Provides WhatsAppAPIService for programmatic message sending.
+
+Note: Webhook processing is handled synchronously in views.py.
+      Direct API calls (send_whatsapp_message, send_read_receipt_api,
+      download_whatsapp_media) are now in utils.py matching hanna's pattern.
 """
 import logging
-import hmac
-import hashlib
-import json
 from typing import Dict, Any, Optional
-from django.conf import settings
 
-from .models import MetaAppConfig, WebhookEventLog
-from conversations.models import Contact, Message
+from .models import MetaAppConfig
 
 logger = logging.getLogger(__name__)
 
@@ -229,125 +228,3 @@ class WhatsAppAPIService:
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to send typing indicator to {to}: {str(e)}")
             raise
-
-
-class WebhookProcessor:
-    """
-    Processes incoming webhook events from Meta WhatsApp Business API.
-    Handles signature verification, event parsing, and logging.
-    """
-
-    @staticmethod
-    def verify_signature(payload: bytes, signature: str, app_secret: str) -> bool:
-        """
-        Verify webhook signature using HMAC-SHA256.
-
-        Args:
-            payload: Raw request body as bytes
-            signature: X-Hub-Signature-256 header value (format: "sha256=...")
-            app_secret: App secret from MetaAppConfig
-
-        Returns:
-            bool: True if signature is valid
-        """
-        if not signature or not signature.startswith("sha256="):
-            return False
-
-        expected_signature = signature.split("sha256=")[1]
-        computed_hmac = hmac.new(
-            app_secret.encode('utf-8'),
-            payload,
-            hashlib.sha256
-        ).hexdigest()
-
-        return hmac.compare_digest(computed_hmac, expected_signature)
-
-    @staticmethod
-    def extract_phone_number_id(payload: Dict[str, Any]) -> Optional[str]:
-        """
-        Extract phone_number_id from webhook payload.
-
-        Args:
-            payload: Webhook payload dict
-
-        Returns:
-            str: phone_number_id or None
-        """
-        try:
-            entry = payload.get("entry", [{}])[0]
-            changes = entry.get("changes", [{}])[0]
-            metadata = changes.get("value", {}).get("metadata", {})
-            return metadata.get("phone_number_id")
-        except (IndexError, KeyError, AttributeError):
-            return None
-
-    @staticmethod
-    def extract_event_type(payload: Dict[str, Any]) -> str:
-        """
-        Determine event type from webhook payload.
-
-        Args:
-            payload: Webhook payload dict
-
-        Returns:
-            str: Event type (message, message_status, etc.)
-        """
-        try:
-            entry = payload.get("entry", [{}])[0]
-            changes = entry.get("changes", [{}])[0]
-            value = changes.get("value", {})
-
-            if "messages" in value:
-                return "message"
-            elif "statuses" in value:
-                return "message_status"
-            elif "contacts" in value:
-                return "referral"
-            else:
-                return "unknown"
-        except (IndexError, KeyError, AttributeError):
-            return "unknown"
-
-    @staticmethod
-    def process_webhook_event(payload: Dict[str, Any], config: MetaAppConfig) -> WebhookEventLog:
-        """
-        Process a webhook event and create a log entry.
-
-        Args:
-            payload: Webhook payload dict
-            config: MetaAppConfig instance
-
-        Returns:
-            WebhookEventLog: Created log entry
-        """
-        event_type = WebhookProcessor.extract_event_type(payload)
-        phone_number_id = WebhookProcessor.extract_phone_number_id(payload)
-
-        # Extract event identifier (e.g., wamid for messages)
-        event_identifier = None
-        try:
-            entry = payload.get("entry", [{}])[0]
-            changes = entry.get("changes", [{}])[0]
-            value = changes.get("value", {})
-
-            if "messages" in value:
-                event_identifier = value["messages"][0].get("id")
-            elif "statuses" in value:
-                event_identifier = value["statuses"][0].get("id")
-        except (IndexError, KeyError, AttributeError):
-            pass
-
-        # Create webhook log
-        webhook_log = WebhookEventLog.objects.create(
-            event_identifier=event_identifier,
-            app_config=config,
-            event_type=event_type,
-            payload_object_type=payload.get("object"),
-            payload=payload,
-            phone_number_id_received=phone_number_id,
-            waba_id_received=config.waba_id,
-            processing_status="pending"
-        )
-
-        logger.info(f"Webhook event logged: {event_type} - {event_identifier}")
-        return webhook_log

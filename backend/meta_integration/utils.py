@@ -1,258 +1,212 @@
 """
 Utility functions for meta_integration app.
 
-Following conventions from morebnyemba/hanna and morebnyemba/whatsappcrm.
-Provides helper functions for WhatsApp API interactions.
+Aligned with morebnyemba/hanna's meta_integration/utils.py.
+Provides direct helper functions for WhatsApp API interactions.
 """
+import json
 import logging
-from typing import Dict, Any, Optional
+import requests
+from typing import Dict, Any, Optional, Tuple
 
 from .models import MetaAppConfig
-from .services import WhatsAppAPIService
 
 logger = logging.getLogger(__name__)
 
 
+def get_active_meta_config_for_sending() -> Optional[MetaAppConfig]:
+    """
+    Get the active MetaAppConfig for sending messages.
+    Matches hanna's helper function.
+
+    Returns:
+        MetaAppConfig instance, or None
+    """
+    try:
+        return MetaAppConfig.objects.get_active_config()
+    except Exception:
+        logger.error("Cannot retrieve active MetaAppConfig for sending.")
+        return None
+
+
 def send_whatsapp_message(
-    phone_number: str,
-    message_config: Dict[str, Any],
-    config: Optional[MetaAppConfig] = None
-) -> Dict[str, Any]:
+    to_phone_number: str,
+    message_type: str,
+    data: dict,
+    config: Optional[MetaAppConfig] = None,
+) -> Optional[Dict[str, Any]]:
     """
-    Send a WhatsApp message using the Meta Business API.
-
-    This is a convenience function that wraps WhatsAppAPIService.
+    Send a WhatsApp message using the Meta Graph API.
+    Matches hanna's send_whatsapp_message signature.
 
     Args:
-        phone_number: Recipient phone number in E.164 format (e.g., +263771234567)
-        message_config: Message configuration dict with structure:
-            {
-                "message_type": "text|template|image|document|interactive",
-                "text": {"body": "..."} for text messages,
-                "template": {...} for template messages,
-                etc.
-            }
-        config: MetaAppConfig instance. If None, uses the active config.
+        to_phone_number: The recipient's WhatsApp ID (phone number).
+        message_type: Type of message ('text', 'interactive', 'template', 'image', etc.).
+        data: The payload specific to the message type.
+        config: MetaAppConfig instance. If None, tries to fetch the active one.
 
     Returns:
-        dict: API response containing message ID and status
-
-    Example:
-        >>> send_whatsapp_message(
-        ...     "+263771234567",
-        ...     {"message_type": "text", "text": {"body": "Hello!"}}
-        ... )
-        {'messages': [{'id': 'wamid.XXX'}]}
+        dict: The JSON response from Meta API on success.
+              On error, returns a dict with 'error' key.
+              Returns None only if config is not available.
     """
-    try:
-        service = WhatsAppAPIService(config=config)
-        return service.send_message(phone_number, message_config)
-    except Exception as e:
-        logger.error(f"Error sending WhatsApp message to {phone_number}: {str(e)}")
-        raise
+    if not config:
+        config = get_active_meta_config_for_sending()
 
+    if not config:
+        logger.error("Cannot send WhatsApp message: No active MetaAppConfig available.")
+        return None
 
-def send_text_message(
-    phone_number: str,
-    text: str,
-    config: Optional[MetaAppConfig] = None
-) -> Dict[str, Any]:
-    """
-    Send a simple text message via WhatsApp.
+    api_version = config.api_version
+    phone_number_id = config.phone_number_id
+    access_token = config.access_token
 
-    Args:
-        phone_number: Recipient phone number in E.164 format
-        text: Message text content
-        config: MetaAppConfig instance. If None, uses the active config.
+    url = f"https://graph.facebook.com/{api_version}/{phone_number_id}/messages"
 
-    Returns:
-        dict: API response containing message ID
-
-    Example:
-        >>> send_text_message("+263771234567", "Hello from Sungrip Solar!")
-    """
-    message_config = {
-        "message_type": "text",
-        "text": {"body": text}
-    }
-    return send_whatsapp_message(phone_number, message_config, config)
-
-
-def send_template_message(
-    phone_number: str,
-    template_name: str,
-    language_code: str = "en",
-    components: Optional[list] = None,
-    config: Optional[MetaAppConfig] = None
-) -> Dict[str, Any]:
-    """
-    Send a WhatsApp template message.
-
-    Args:
-        phone_number: Recipient phone number in E.164 format
-        template_name: Name of the approved WhatsApp template
-        language_code: Language code (default: "en")
-        components: List of template components (header, body, buttons)
-        config: MetaAppConfig instance. If None, uses the active config.
-
-    Returns:
-        dict: API response containing message ID
-
-    Example:
-        >>> send_template_message(
-        ...     "+263771234567",
-        ...     "solar_quote_request",
-        ...     components=[{
-        ...         "type": "body",
-        ...         "parameters": [{"type": "text", "text": "John"}]
-        ...     }]
-        ... )
-    """
-    message_config = {
-        "message_type": "template",
-        "template": {
-            "name": template_name,
-            "language": {"code": language_code}
-        }
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
     }
 
-    if components:
-        message_config["template"]["components"] = components
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to_phone_number,
+        "type": message_type,
+        message_type: data,
+    }
 
-    return send_whatsapp_message(phone_number, message_config, config)
+    if message_type == "text" and "preview_url" in data:
+        if not isinstance(data["preview_url"], bool):
+            data["preview_url"] = bool(data["preview_url"])
 
+    logger.debug(f"Sending WhatsApp message via config '{config.name}'. URL: {url}")
 
-def get_active_whatsapp_config() -> MetaAppConfig:
-    """
-    Get the currently active WhatsApp configuration.
-
-    Returns:
-        MetaAppConfig: Active configuration instance
-
-    Raises:
-        MetaAppConfig.DoesNotExist: If no active config exists
-    """
-    return MetaAppConfig.objects.get_active_config()
-
-
-def send_typing_indicator(
-    phone_number: str,
-    config: Optional[MetaAppConfig] = None
-) -> Dict[str, Any]:
-    """
-    Send typing indicator to show "typing..." status to recipient.
-
-    The typing indicator is displayed for approximately 10 seconds or until
-    a message is sent to the user, whichever comes first. Useful for creating
-    a more natural conversation experience.
-
-    Args:
-        phone_number: Recipient phone number in E.164 format
-        config: MetaAppConfig instance. If None, uses the active config.
-
-    Returns:
-        dict: API response
-
-    Example:
-        >>> send_typing_indicator("+263771234567")
-        {'success': True}
-    """
     try:
-        service = WhatsAppAPIService(config=config)
-        return service.send_typing_indicator(phone_number)
-    except Exception as e:
-        logger.error(f"Error sending typing indicator to {phone_number}: {str(e)}")
-        raise
-
-
-def format_phone_number(phone: str) -> str:
-    """
-    Format phone number to E.164 format.
-
-    Args:
-        phone: Phone number in any format
-
-    Returns:
-        str: Phone number in E.164 format
-
-    Example:
-        >>> format_phone_number("0771234567")
-        '+263771234567'
-        >>> format_phone_number("+263771234567")
-        '+263771234567'
-    """
-    # Remove spaces, dashes, and other non-numeric characters
-    cleaned = ''.join(filter(str.isdigit, phone))
-
-    # Add Zimbabwe country code if not present
-    if not phone.startswith('+'):
-        if cleaned.startswith('0'):
-            cleaned = '263' + cleaned[1:]
-        elif not cleaned.startswith('263'):
-            cleaned = '263' + cleaned
-
-    return '+' + cleaned
-
-
-def extract_message_from_webhook(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """
-    Extract message data from webhook payload.
-
-    Args:
-        payload: Webhook payload dict
-
-    Returns:
-        dict: Message data or None if not a message event
-
-    Example payload structure:
-        {
-            "object": "whatsapp_business_account",
-            "entry": [{
-                "changes": [{
-                    "value": {
-                        "messages": [{
-                            "from": "+263771234567",
-                            "id": "wamid.XXX",
-                            "timestamp": "1234567890",
-                            "type": "text",
-                            "text": {"body": "Hello"}
-                        }]
-                    }
-                }]
-            }]
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        response_json = response.json()
+        logger.info(
+            f"Message sent successfully to {to_phone_number} via config '{config.name}'. "
+            f"Response: {response_json}"
+        )
+        return response_json
+    except requests.exceptions.HTTPError as e:
+        error_body = {}
+        try:
+            error_body = e.response.json()
+        except Exception:
+            error_body = {'raw_text': e.response.text[:500]}
+        logger.error(
+            f"HTTP error sending message to {to_phone_number}: "
+            f"{e.response.status_code} - {error_body}"
+        )
+        return {
+            'error': error_body,
+            'status_code': e.response.status_code,
+            'error_type': error_body.get('error', {}).get('type', 'Unknown'),
         }
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request error sending message to {to_phone_number}: {e}")
+        return {'error': str(e)}
+
+
+def send_read_receipt_api(
+    wamid: str,
+    config: MetaAppConfig,
+    show_typing_indicator: bool = False,
+) -> Optional[Dict[str, Any]]:
     """
-    try:
-        entry = payload.get("entry", [{}])[0]
-        changes = entry.get("changes", [{}])[0]
-        value = changes.get("value", {})
-        messages = value.get("messages", [])
-
-        if messages:
-            return messages[0]
-        return None
-    except (IndexError, KeyError, AttributeError):
-        return None
-
-
-def extract_status_from_webhook(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """
-    Extract message status update from webhook payload.
+    Send a read receipt to the Meta Graph API for a specific message.
+    Matches hanna's send_read_receipt_api utility.
 
     Args:
-        payload: Webhook payload dict
+        wamid: The WhatsApp Message ID to mark as read.
+        config: The MetaAppConfig instance to use.
+        show_typing_indicator: If True, includes a typing indicator.
 
     Returns:
-        dict: Status data or None if not a status event
+        dict: The JSON response from Meta API, or None on failure.
     """
-    try:
-        entry = payload.get("entry", [{}])[0]
-        changes = entry.get("changes", [{}])[0]
-        value = changes.get("value", {})
-        statuses = value.get("statuses", [])
-
-        if statuses:
-            return statuses[0]
+    if not config:
+        logger.error("Cannot send read receipt: No MetaAppConfig provided.")
         return None
-    except (IndexError, KeyError, AttributeError):
+
+    url = f"https://graph.facebook.com/{config.api_version}/{config.phone_number_id}/messages"
+
+    headers = {
+        "Authorization": f"Bearer {config.access_token}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "status": "read",
+        "message_id": wamid,
+    }
+
+    if show_typing_indicator:
+        payload["typing_indicator"] = {"type": "text"}
+
+    logger.debug(f"Sending read receipt for WAMID {wamid} via config '{config.name}'.")
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
+        response.raise_for_status()
+        response_json = response.json()
+        logger.info(f"Read receipt sent for WAMID {wamid} via config '{config.name}'.")
+        return response_json
+    except requests.exceptions.HTTPError as e:
+        logger.error(
+            f"HTTP error sending read receipt for WAMID {wamid}: "
+            f"{e.response.status_code} - {e.response.text}"
+        )
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request error sending read receipt for WAMID {wamid}: {e}")
+
+    return None
+
+
+def download_whatsapp_media(
+    media_id: str,
+    config: MetaAppConfig,
+) -> Optional[Tuple[bytes, str]]:
+    """
+    Downloads media from WhatsApp using a given Media ID.
+    Matches hanna's download_whatsapp_media utility.
+
+    Args:
+        media_id: The Media ID of the file to download.
+        config: The active MetaAppConfig containing the API token.
+
+    Returns:
+        Tuple of (content_bytes, mime_type) or None on failure.
+    """
+    if not all([media_id, config, config.access_token]):
+        logger.error("download_whatsapp_media: Missing media_id, config, or access_token.")
+        return None
+
+    # 1. Get Media URL
+    get_url_endpoint = f"https://graph.facebook.com/{config.api_version}/{media_id}/"
+    headers = {"Authorization": f"Bearer {config.access_token}"}
+
+    try:
+        response = requests.get(get_url_endpoint, headers=headers, timeout=10)
+        response.raise_for_status()
+        media_info = response.json()
+        media_url = media_info.get("url")
+        mime_type = media_info.get("mime_type")
+
+        if not media_url:
+            logger.error(f"No URL returned for media ID {media_id}.")
+            return None
+
+        # 2. Download the actual media content
+        media_response = requests.get(media_url, headers=headers, timeout=30)
+        media_response.raise_for_status()
+
+        logger.info(f"Downloaded media {media_id} ({mime_type}, {len(media_response.content)} bytes).")
+        return media_response.content, mime_type
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error downloading media {media_id}: {e}")
         return None

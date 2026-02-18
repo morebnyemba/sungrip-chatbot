@@ -1263,7 +1263,7 @@ def execute_actions(actions: List[Dict[str, Any]]):
     - send_whatsapp_message: {recipient_wa_id, message_type, data}
     - send_typing_indicator: {recipient_wa_id}
     """
-    from meta_integration.utils import send_whatsapp_message, send_typing_indicator
+    from meta_integration.utils import send_whatsapp_message
 
     for action in actions:
         action_type = action.get('type')
@@ -1273,14 +1273,15 @@ def execute_actions(actions: List[Dict[str, Any]]):
                 msg_type = action.get('message_type')
                 data = action.get('data')
                 if wa_id and msg_type and data is not None:
-                    # Reconstruct message_config for the send utility
-                    msg_config = {'message_type': msg_type, msg_type: data}
-                    send_whatsapp_message(wa_id, msg_config)
+                    # Call with hanna-compatible signature (to_phone_number, message_type, data)
+                    send_whatsapp_message(wa_id, msg_type, data)
             elif action_type == 'send_typing_indicator':
                 wa_id = action.get('recipient_wa_id')
                 if wa_id:
                     try:
-                        send_typing_indicator(wa_id)
+                        from meta_integration.services import WhatsAppAPIService
+                        service = WhatsAppAPIService()
+                        service.send_typing_indicator(wa_id)
                     except Exception as e:
                         logger.warning(f"Typing indicator failed: {e}")
             elif action_type and action_type.startswith('_internal_'):
