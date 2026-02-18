@@ -25,8 +25,10 @@ wait_for_migrations() {
             echo "Warning: No migrations found in the project"
         else
             # Check if there are applied migrations and no unapplied ones
-            HAS_APPLIED=$(echo "$MIGRATIONS_OUTPUT" | grep -c '\[X\]' || echo "0")
-            HAS_UNAPPLIED=$(echo "$MIGRATIONS_OUTPUT" | grep -c '\[ \]' || echo "0")
+            HAS_APPLIED=$(echo "$MIGRATIONS_OUTPUT" | grep -c '\[X\]' || true)
+            HAS_UNAPPLIED=$(echo "$MIGRATIONS_OUTPUT" | grep -c '\[ \]' || true)
+            HAS_APPLIED=${HAS_APPLIED:-0}
+            HAS_UNAPPLIED=${HAS_UNAPPLIED:-0}
             
             if [ "$HAS_APPLIED" -gt 0 ] && [ "$HAS_UNAPPLIED" -eq 0 ]; then
                 echo "All migrations are complete!"

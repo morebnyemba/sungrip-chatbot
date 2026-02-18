@@ -18,6 +18,9 @@ router.register(r'webhook-logs', views.WebhookEventLogViewSet, basename='webhook
 
 urlpatterns = [
     # Webhook receiver (Meta sends events here)
+    # Both with and without trailing slash — Meta sends without trailing slash
+    # and Django's APPEND_SLASH 301 redirect is not followed by Meta.
+    path('webhook', views.MetaWebhookAPIView.as_view(), name='meta_webhook_receiver_no_slash'),
     path('webhook/', views.MetaWebhookAPIView.as_view(), name='meta_webhook_receiver'),
 
     # Status check (sungrip-chatbot convenience endpoint)
