@@ -11,13 +11,11 @@ from django.core.management.base import BaseCommand, CommandError
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from flows.models import Flow, FlowStep, FlowTransition
-from flows.definitions.solar_flows import (
-    MAIN_MENU_FLOW,
-    SOLAR_QUOTE_FLOW,
-    INSTALLATION_SCHEDULING_FLOW,
-    SOLAR_PACKAGES_FLOW,
-    CONTACT_SUPPORT_FLOW
-)
+from flows.definitions.main_menu_flow import MAIN_MENU_FLOW
+from flows.definitions.solar_quote_flow import SOLAR_QUOTE_FLOW
+from flows.definitions.installation_scheduling_flow import INSTALLATION_SCHEDULING_FLOW
+from flows.definitions.solar_packages_flow import SOLAR_PACKAGES_FLOW
+from flows.definitions.contact_support_flow import CONTACT_SUPPORT_FLOW
 
 
 class Command(BaseCommand):
