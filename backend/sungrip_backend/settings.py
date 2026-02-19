@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     'orders',
     'meta_integration',
     'flows',
+    'agents',
 ]
 
 LOCAL_APPS = [
@@ -76,6 +77,7 @@ LOCAL_APPS = [
     'orders',
     'meta_integration',
     'flows',
+    'agents',
 ]
 
 MIDDLEWARE = [
@@ -250,5 +252,8 @@ JAZZMIN_SETTINGS = {
         'orders.Order': 'fas fa-shopping-cart',
         'conversations.Contact': 'fas fa-address-book',
         'conversations.Message': 'fas fa-comments',
+        'agents.Agent': 'fas fa-user-secret',
+        'agents.Bet': 'fas fa-dice',
+        'agents.AgentEarning': 'fas fa-coins',
     },
 }

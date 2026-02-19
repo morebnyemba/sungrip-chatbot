@@ -26,6 +26,9 @@ urlpatterns = [
 
     # Flow Management (optional API endpoints)
     path('api/flows/', include('flows.urls')),
+
+    # Agent Management
+    path('api/', include('agents.urls')),
 ]
 
 # Serve media files in development
