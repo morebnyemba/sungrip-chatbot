@@ -64,7 +64,7 @@ def process_bet_outcome(bet):
         logger.info("Bet %s: earning already exists, skipping.", bet.bet_reference)
         return AgentEarning.objects.get(bet=bet)
 
-    commission_amount = (bet.amount * agent.commission_rate) / Decimal('100')
+    commission_amount = ((bet.amount * agent.commission_rate) / Decimal('100')).quantize(Decimal('0.01'))
 
     earning = AgentEarning.objects.create(
         agent=agent,

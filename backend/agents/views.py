@@ -58,9 +58,9 @@ class BetViewSet(viewsets.ModelViewSet):
         """Settle a bet with outcome: won, lost, or cancelled."""
         bet = self.get_object()
         outcome = request.data.get('outcome')
-        if outcome not in ('won', 'lost', 'cancelled'):
+        if not outcome or outcome not in ('won', 'lost', 'cancelled'):
             return Response(
-                {'error': "outcome must be 'won', 'lost', or 'cancelled'"},
+                {'error': "outcome is required and must be 'won', 'lost', or 'cancelled'"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         updated_bet = settle_bet(bet, outcome)

@@ -25,7 +25,7 @@ class Agent(models.Model):
     phone_number = models.CharField(max_length=20, unique=True)
     email = models.EmailField(blank=True)
     referral_code = models.CharField(
-        max_length=50, unique=True, db_index=True,
+        max_length=50, unique=True, db_index=True, blank=False,
         help_text="Unique code used by customers to register under this agent"
     )
     commission_rate = models.DecimalField(
