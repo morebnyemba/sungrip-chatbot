@@ -117,7 +117,7 @@ class WebhookEventLog(models.Model):
         ('message_status', 'Message Status Update'),
         ('template_status', 'Message Template Status Update'),
         ('account_update', 'Account Update'),
-        ('referral', 'Referral Event'),
+        ('agent', 'Agent Event'),
         ('system', 'System Message'),
         ('flow_response', 'Flow Response'),
         ('security', 'Security Notification'),
