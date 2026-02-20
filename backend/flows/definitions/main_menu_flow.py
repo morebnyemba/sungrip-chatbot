@@ -74,6 +74,11 @@ MAIN_MENU_FLOW = {
                                             "description": "Compare our ready-made solar packages & pricing"
                                         },
                                         {
+                                            "id": "shop_products",
+                                            "title": "🛒 Shop Products",
+                                            "description": "Browse individual solar equipment & accessories"
+                                        },
+                                        {
                                             "id": "request_quote",
                                             "title": "📋 Get a Free Quote",
                                             "description": "Receive a personalised quote in minutes"
@@ -114,12 +119,20 @@ MAIN_MENU_FLOW = {
                     "priority": 1
                 },
                 {
+                    "to_step": "route_to_catalog",
+                    "condition_config": {
+                        "type": "interactive_reply_id_equals",
+                        "value": "shop_products"
+                    },
+                    "priority": 2
+                },
+                {
                     "to_step": "route_to_quote",
                     "condition_config": {
                         "type": "interactive_reply_id_equals",
                         "value": "request_quote"
                     },
-                    "priority": 2
+                    "priority": 3
                 },
                 {
                     "to_step": "route_to_installation",
@@ -127,7 +140,7 @@ MAIN_MENU_FLOW = {
                         "type": "interactive_reply_id_equals",
                         "value": "schedule_installation"
                     },
-                    "priority": 3
+                    "priority": 4
                 },
                 {
                     "to_step": "route_to_support",
@@ -135,12 +148,12 @@ MAIN_MENU_FLOW = {
                         "type": "interactive_reply_id_equals",
                         "value": "contact_support"
                     },
-                    "priority": 4
+                    "priority": 5
                 },
                 {
                     "to_step": "show_main_menu",
                     "condition_config": {"type": "always_true"},
-                    "priority": 5
+                    "priority": 6
                 }
             ]
         },
@@ -171,6 +184,16 @@ MAIN_MENU_FLOW = {
             "config": {
                 "target_flow_name": "solar_packages",
                 "message": "Let me show you our available solar packages. 📦",
+                "initial_context_template": {}
+            },
+            "transitions": []
+        },
+        {
+            "name": "route_to_catalog",
+            "type": "switch_flow",
+            "config": {
+                "target_flow_name": "product_catalog",
+                "message": "Let me show you our product catalog. 🛒",
                 "initial_context_template": {}
             },
             "transitions": []

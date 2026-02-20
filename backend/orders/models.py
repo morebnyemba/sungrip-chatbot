@@ -465,3 +465,128 @@ class PaymentSchedule(models.Model):
     def is_overdue(self):
         from django.utils import timezone
         return self.status in ['pending', 'due'] and self.due_date < timezone.now().date()
+
+
+class ProductOrder(models.Model):
+    """
+    Lightweight product order created directly from the WhatsApp catalog flow.
+
+    Unlike the full Quote → Order pipeline (which involves admin review,
+    payment plans, and installation scheduling), a ProductOrder captures
+    an individual product purchase intent from the chatbot immediately.
+
+    The sales team can then convert it into a full Order if
+    installation/delivery logistics are needed.
+    """
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending Review'),
+        ('confirmed', 'Confirmed'),
+        ('processing', 'Processing'),
+        ('shipped', 'Shipped / Out for Delivery'),
+        ('delivered', 'Delivered'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    # Identification
+    order_number = models.CharField(
+        max_length=50, unique=True,
+        help_text="Auto-generated order reference e.g. PO-20260220-001"
+    )
+
+    # Customer link
+    customer = models.ForeignKey(
+        Customer, on_delete=models.CASCADE,
+        related_name='product_orders',
+        null=True, blank=True,
+    )
+    contact = models.ForeignKey(
+        'conversations.Contact', on_delete=models.CASCADE,
+        related_name='product_orders',
+        null=True, blank=True,
+        help_text="WhatsApp contact who placed the order"
+    )
+    customer_name = models.CharField(max_length=200, blank=True)
+    customer_phone = models.CharField(max_length=30, blank=True)
+
+    # Product details (snapshot at time of order)
+    product = models.ForeignKey(
+        Product, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='product_orders',
+    )
+    product_name = models.CharField(max_length=200)
+    product_sku = models.CharField(max_length=50, blank=True)
+    quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    total_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    currency = models.CharField(max_length=3, default='USD')
+
+    # Delivery / collection preference
+    delivery_method = models.CharField(
+        max_length=20,
+        choices=[
+            ('delivery', 'Delivery'),
+            ('collection', 'Collection'),
+            ('not_specified', 'Not Specified'),
+        ],
+        default='not_specified',
+    )
+    delivery_address = models.TextField(blank=True)
+
+    # Status
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True
+    )
+
+    # Conversion to full order (optional)
+    full_order = models.ForeignKey(
+        Order, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='source_product_orders',
+        help_text="Full order created from this product order (if any)"
+    )
+
+    # Notes
+    customer_notes = models.TextField(blank=True)
+    internal_notes = models.TextField(blank=True)
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Product Order'
+        verbose_name_plural = 'Product Orders'
+
+    def __str__(self):
+        return f"{self.order_number} — {self.product_name} x{self.quantity}"
+
+    def save(self, *args, **kwargs):
+        if not self.order_number:
+            self.order_number = self._generate_order_number()
+        if not self.total_price:
+            self.total_price = self.unit_price * self.quantity
+        super().save(*args, **kwargs)
+
+    @staticmethod
+    def _generate_order_number():
+        from django.utils import timezone
+        today = timezone.now().strftime('%Y%m%d')
+        prefix = f"PO-{today}-"
+        last = (
+            ProductOrder.objects
+            .filter(order_number__startswith=prefix)
+            .order_by('-order_number')
+            .first()
+        )
+        if last:
+            try:
+                seq = int(last.order_number.split('-')[-1]) + 1
+            except (ValueError, IndexError):
+                seq = 1
+        else:
+            seq = 1
+        return f"{prefix}{seq:03d}"

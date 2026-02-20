@@ -12,6 +12,10 @@ class ProductCategory(models.Model):
     description = models.TextField(blank=True)
     icon = models.CharField(max_length=50, blank=True, help_text="Font Awesome icon class")
     parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='subcategories')
+    google_product_category = models.CharField(
+        max_length=255, blank=True,
+        help_text="Google Product Category for Meta Catalog mapping"
+    )
     is_active = models.BooleanField(default=True)
     display_order = models.IntegerField(default=0)
     
@@ -71,6 +75,28 @@ class Product(models.Model):
     # Warranty
     warranty_period_months = models.IntegerField(default=12, help_text="Warranty period in months")
     
+    # WhatsApp / Meta Catalog sync fields (following hanna pattern)
+    whatsapp_catalog_id = models.CharField(
+        max_length=255, blank=True, null=True,
+        help_text="WhatsApp Catalog product ID (set automatically on sync)"
+    )
+    meta_sync_attempts = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of times sync to Meta Catalog has been attempted"
+    )
+    meta_sync_last_error = models.TextField(
+        blank=True, null=True,
+        help_text="Last error message from Meta API sync attempt"
+    )
+    meta_sync_last_attempt = models.DateTimeField(
+        blank=True, null=True,
+        help_text="Timestamp of last sync attempt"
+    )
+    meta_sync_last_success = models.DateTimeField(
+        blank=True, null=True,
+        help_text="Timestamp of last successful sync"
+    )
+    
     # Status
     is_active = models.BooleanField(default=True)
     is_featured = models.BooleanField(default=False)
@@ -94,6 +120,29 @@ class Product(models.Model):
         if self.cost_price > 0:
             return ((self.selling_price - self.cost_price) / self.cost_price) * 100
         return 0
+
+    def reset_meta_sync_attempts(self):
+        """Reset Meta sync attempt counter and error for manual retry."""
+        self.meta_sync_attempts = 0
+        self.meta_sync_last_error = None
+        self.save(update_fields=['meta_sync_attempts', 'meta_sync_last_error'])
+
+
+class ProductImage(models.Model):
+    """Multiple images per product (following hanna pattern)"""
+    
+    product = models.ForeignKey(Product, related_name='images', on_delete=models.CASCADE)
+    image = models.ImageField(upload_to='product_images/')
+    alt_text = models.CharField(max_length=255, blank=True, help_text="Brief description for accessibility")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = 'Product Image'
+        verbose_name_plural = 'Product Images'
+    
+    def __str__(self):
+        return f"Image for {self.product.name}"
 
 
 class SolarPackage(models.Model):

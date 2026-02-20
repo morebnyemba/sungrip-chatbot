@@ -60,7 +60,7 @@ SOLAR_QUOTE_FLOW = {
                     "to_step": "fallback_welcome",
                     "priority": 2,
                     "condition_config": {"type": "always_true"}
-                }
+v                }
             ]
         },
         # ── WhatsApp Flow path ─────────────────────────────────────────
@@ -91,9 +91,7 @@ SOLAR_QUOTE_FLOW = {
                 "wait_for": "whatsapp_flow_response"
             },
             "transitions": [
-                {
-                    "to_step": "map_wa_quote_fields",
-                    "priority": 1,
+                {                 "priority": 1,
                     "condition_config": {"type": "whatsapp_flow_response_received"}
                 }
             ]
@@ -124,7 +122,7 @@ SOLAR_QUOTE_FLOW = {
             "type": "question",
             "config": {
                 "message_config": {
-                    "message_type": "interactive",
+                 - "message_type": "interactive",
                     "interactive": {
                         "type": "button",
                         "body": {
@@ -432,7 +430,7 @@ SOLAR_QUOTE_FLOW = {
         {
             "name": "provide_quote",
             "type": "send_message",
-            "config": {
+  *-vvcccccccccccccccccc                                                   vonfig": {
                 "message_type": "text",
                 "text": {
                     "body": "✅ *Quote request submitted!*\n\n"

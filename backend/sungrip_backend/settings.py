@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     'orders',
     'meta_integration',
     'flows',
+    'notifications',
 ]
 
 LOCAL_APPS = [
@@ -76,6 +77,7 @@ LOCAL_APPS = [
     'orders',
     'meta_integration',
     'flows',
+    'notifications',
 ]
 
 MIDDLEWARE = [
@@ -228,6 +230,9 @@ WHATSAPP_ACCESS_TOKEN = os.environ.get('WHATSAPP_ACCESS_TOKEN', '')
 WHATSAPP_APP_SECRET = os.environ.get('WHATSAPP_APP_SECRET', '')
 WHATSAPP_VERIFY_TOKEN = os.environ.get('WHATSAPP_VERIFY_TOKEN', 'sungrip_verify_token')
 
+# Notification template version suffix (appended when sending Meta templates)
+META_SYNC_VERSION_SUFFIX = os.environ.get('META_SYNC_VERSION_SUFFIX', 'v1_01')
+
 # Google Gemini AI Configuration
 GOOGLE_AI_API_KEY = os.environ.get('GOOGLE_AI_API_KEY', '')
 
@@ -250,5 +255,7 @@ JAZZMIN_SETTINGS = {
         'orders.Order': 'fas fa-shopping-cart',
         'conversations.Contact': 'fas fa-address-book',
         'conversations.Message': 'fas fa-comments',
+        'notifications.Notification': 'fas fa-bell',
+        'notifications.NotificationTemplate': 'fas fa-file-alt',
     },
 }
