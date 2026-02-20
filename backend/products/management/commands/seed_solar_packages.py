@@ -1,9 +1,10 @@
 """
 Management command to seed the database with Sungrip solar packages.
 
-Creates all 6 standard packages:
-  • 3 × Cash-on-delivery packages  (3.5 kVA, 4.2 kVA, 6.2 kVA)
-  • 3 × 6-month payment-plan packages (3.5 kVA, 4.2 kVA, 6.2 kVA)
+Creates all 9 standard packages:
+  • 3 × Cash-on-delivery packages      (3.5 kVA, 4.2 kVA, 6.2 kVA)
+  • 3 × 3-month payment-plan packages  (3.5 kVA, 4.2 kVA, 6.2 kVA)
+  • 3 × 6-month payment-plan packages  (3.5 kVA, 4.2 kVA, 6.2 kVA)
 
 Usage:
     python manage.py seed_solar_packages          # create missing only
@@ -135,6 +136,119 @@ PACKAGES = [
             "Payment after delivery & installation",
         ],
     },
+    # ──── 3-Month Payment Plan Packages (Valentine's Promo) ──────────
+    {
+        "name": "3.5kVA Solar System",
+        "description": (
+            "Entry-level home solar system with affordable 3-month payment "
+            "plan. Supply and fix — professional installation included. "
+            "Outside Harare, transport charges apply. "
+            "Warranty and after-service support included."
+        ),
+        "system_size_kw": 3.5,
+        "recommended_for": "small_home",
+        "total_price": 1399,
+        "payment_type": "installment",
+        "installment_months": 3,
+        "installation_included": True,
+        "is_active": True,
+        "is_popular": False,
+        "display_order": 4,
+        "equipment_summary": [
+            "4 × 450-585W Solar Panels",
+            "100Ah 24V Lithium Battery",
+            "3.5 kVA Hybrid Inverter",
+        ],
+        "powers": [
+            "Fridge",
+            "TV",
+            "Solar Iron",
+            "WiFi Router",
+            "Decoder",
+            "Lights & Laptop",
+            "Borehole Pump (0.5 HP)",
+        ],
+        "features": [
+            "3-month payment plan",
+            "$325 deposit, then $537/month × 2",
+            "Professional supply & installation",
+            "Warranty & after-service support",
+        ],
+    },
+    {
+        "name": "4.2kVA Solar System",
+        "description": (
+            "Mid-range home solar system with camera support and affordable "
+            "3-month payment plan. Supply and fix — professional installation "
+            "included. Outside Harare, transport charges apply. "
+            "Warranty and after-service support included."
+        ),
+        "system_size_kw": 4.2,
+        "recommended_for": "medium_home",
+        "total_price": 1699,
+        "payment_type": "installment",
+        "installment_months": 3,
+        "installation_included": True,
+        "is_active": True,
+        "is_popular": True,
+        "display_order": 5,
+        "equipment_summary": [
+            "4 × 450-585W Solar Panels",
+            "100Ah 24V Lithium Battery",
+            "4.2 kVA Hybrid Inverter",
+        ],
+        "powers": [
+            "Fridge",
+            "TV",
+            "Security Cameras",
+            "Solar Iron",
+            "WiFi Router",
+            "Decoder",
+            "Lights & Laptop",
+            "Borehole Pump (0.75 HP)",
+        ],
+        "features": [
+            "3-month payment plan",
+            "$325 deposit, then $687/month × 2",
+            "Professional supply & installation",
+            "Warranty & after-service support",
+        ],
+    },
+    {
+        "name": "6.2kVA Solar System",
+        "description": (
+            "Heavy-duty home solar system for large households with affordable "
+            "3-month payment plan. Powers all lights, plugs, entertainment, "
+            "and multiple fridges. Supply and fix — professional installation "
+            "included. Outside Harare, transport charges apply."
+        ),
+        "system_size_kw": 6.2,
+        "recommended_for": "large_home",
+        "total_price": 2300,
+        "payment_type": "installment",
+        "installment_months": 3,
+        "installation_included": True,
+        "is_active": True,
+        "is_popular": False,
+        "display_order": 6,
+        "equipment_summary": [
+            "6 × 450-585W Solar Panels",
+            "100Ah 51.2V Lithium Battery",
+            "6.2 kVA Hybrid Inverter",
+        ],
+        "powers": [
+            "All Lights & Plugs",
+            "Entertainment Systems",
+            "Up to 3 Fridges",
+            "Borehole & Booster Pump (1.5 HP)",
+        ],
+        "features": [
+            "3-month payment plan",
+            "$1,000 deposit, then $650/month × 2",
+            "Professional supply & installation",
+            "Warranty & after-service support",
+        ],
+    },
     # ──── 6-Month Payment Plan Packages ────────────────────────────────
     {
         "name": "3.5kVA Solar System",
@@ -153,7 +267,7 @@ PACKAGES = [
         "installation_included": True,
         "is_active": True,
         "is_popular": False,
-        "display_order": 4,
+        "display_order": 7,
         "equipment_summary": [
             "4 × 450-585W Solar Panels",
             "100Ah 24V Lithium Battery",
@@ -191,7 +305,7 @@ PACKAGES = [
         "installation_included": True,
         "is_active": True,
         "is_popular": True,
-        "display_order": 5,
+        "display_order": 8,
         "equipment_summary": [
             "4 × 450-585W Solar Panels",
             "100Ah 24V Lithium Battery",
@@ -230,7 +344,7 @@ PACKAGES = [
         "installation_included": True,
         "is_active": True,
         "is_popular": False,
-        "display_order": 6,
+        "display_order": 9,
         "equipment_summary": [
             "6 × 450-585W Solar Panels",
             "100Ah 51.2V Lithium Battery",
@@ -273,22 +387,27 @@ class Command(BaseCommand):
         updated = 0
 
         for pkg_data in PACKAGES:
-            # Use name + payment_type as unique lookup key
-            # (same system size appears under both cash and installment)
+            # Use name + payment_type + installment_months as unique lookup key
+            # (same system size appears under cash, 3-month, and 6-month plans)
             name = pkg_data['name']
             payment_type = pkg_data.get('payment_type', 'cash')
+            installment_months = pkg_data.get('installment_months', 0)
             defaults = {
                 k: v for k, v in pkg_data.items()
-                if k not in ('name', 'payment_type')
+                if k not in ('name', 'payment_type', 'installment_months')
             }
 
             obj, was_created = SolarPackage.objects.update_or_create(
                 name=name,
                 payment_type=payment_type,
+                installment_months=installment_months,
                 defaults=defaults,
             )
 
-            label = "Cash" if payment_type == "cash" else "Plan"
+            if payment_type == 'cash':
+                label = 'Cash'
+            else:
+                label = f'{installment_months}-mo Plan'
             if was_created:
                 created += 1
                 self.stdout.write(f"  ✅ Created: {obj.name} ({label}) — ${obj.total_price:,.0f}")
