@@ -565,6 +565,15 @@ def _handle_fallback(
 ) -> Tuple[List[dict], dict]:
     """
     Handle when no transition condition matches.
+
+    For question steps:
+      1. Sends a short "I didn't understand" nudge.
+      2. Re-sends the *original* question message (buttons, list, etc.)
+         so the user sees the interactive options again.
+      3. Preserves the _question_awaiting_reply_for expectation so the
+         engine continues waiting for the correct reply.
+      4. After max retries, hands over to a human or ends the flow.
+
     Returns (actions, updated_context).
     """
     actions = []
@@ -572,7 +581,7 @@ def _handle_fallback(
     config = current_step.config or {}
 
     fallback_cfg = config.get('fallback_config', {})
-    max_retries = fallback_cfg.get('max_retries', 2)
+    max_retries = fallback_cfg.get('max_retries', 3)
     re_prompt_text = fallback_cfg.get('re_prompt_message_text')
     action_after = fallback_cfg.get('action_after_retries', 'human_handover')
 
@@ -582,12 +591,37 @@ def _handle_fallback(
         context['_fallback_count'] = fallback_count
 
         if fallback_count <= max_retries:
-            prompt = re_prompt_text or "I didn't understand that. Please try again."
-            resolved = resolve_value(prompt, context, contact)
-            actions.append(_create_send_action(contact.phone_number, {
+            phone = contact.phone_number
+
+            # --- 1. Send a short nudge explaining what went wrong ---
+            nudge = re_prompt_text or _default_nudge_for_question(config)
+            resolved_nudge = resolve_value(nudge, context, contact)
+            actions.append(_create_send_action(phone, {
                 'message_type': 'text',
-                'text': {'body': resolved}
+                'text': {'body': resolved_nudge}
             }))
+
+            # --- 2. Re-send the original question (buttons / list / text) ---
+            message_config = config.get('message_config', {})
+            if message_config:
+                resolved_msg = resolve_value(message_config, context, contact)
+                actions.append(_create_typing_action(phone))
+                actions.append(_create_send_action(phone, resolved_msg))
+
+            # --- 3. Ensure the question expectation is still set ---
+            reply_config = config.get('reply_config', {})
+            if reply_config and '_question_awaiting_reply_for' not in context:
+                context['_question_awaiting_reply_for'] = {
+                    'variable_name': reply_config.get(
+                        'save_to_variable',
+                        reply_config.get('context_variable')
+                    ),
+                    'expected_type': reply_config.get('expected_type', 'text'),
+                    'validation_regex': reply_config.get('validation_regex'),
+                    'validation': reply_config.get('validation', {}),
+                    'original_step_id': current_step.id,
+                }
+
             logger.info(
                 f"Fallback re-prompt ({fallback_count}/{max_retries}) "
                 f"at step '{current_step.name}'"
@@ -617,6 +651,41 @@ def _handle_fallback(
         actions.extend(_create_human_handover_actions(contact, msg))
 
     return actions, context
+
+
+def _default_nudge_for_question(config: dict) -> str:
+    """
+    Generate a contextual nudge message based on the question's expected
+    reply type, so the user knows *what* kind of answer is expected.
+    """
+    reply_config = config.get('reply_config', {})
+    expected_type = reply_config.get('expected_type', 'text')
+    message_config = config.get('message_config', {})
+    interactive = message_config.get('interactive', {})
+    itype = interactive.get('type', '')
+
+    if expected_type == 'number':
+        return "⚠️ That doesn't look like a valid number. Please enter a number."
+    elif expected_type == 'email':
+        return "⚠️ That doesn't look like a valid email address. Please try again."
+    elif expected_type == 'location':
+        return (
+            "📍 I need your location pin to continue.\n"
+            "Tap 📎 → 📍 Location → Send your current location."
+        )
+    elif expected_type == 'interactive_id':
+        if itype == 'button':
+            return "👆 Please tap one of the buttons above to continue."
+        elif itype == 'list':
+            return "👆 Please select an option from the list above to continue."
+        return "👆 Please select one of the options above to continue."
+    elif expected_type == 'image':
+        return "📷 I need an image to continue. Please send a photo."
+    else:
+        validation_regex = reply_config.get('validation_regex')
+        if validation_regex:
+            return "⚠️ Your response didn't match the expected format. Please try again."
+        return "I didn't quite understand that. Please try again."
 
 
 # ---------------------------------------------------------------------------
@@ -813,8 +882,16 @@ def _process_question_reply(
             except ValueError:
                 return False, None
         elif expected_type == 'interactive_id':
-            # Accept text as interactive_id for legacy compat
-            return True, user_text
+            # When expecting an interactive reply (button/list tap), free-form
+            # text is NOT valid — the user needs to pick an option.
+            # Return invalid so the fallback re-prompts with the buttons/list.
+            return False, None
+        elif expected_type == 'location':
+            # Text is not a valid location
+            return False, None
+        elif expected_type == 'image':
+            # Text is not a valid image
+            return False, None
         else:
             # text type
             if validation_regex:
