@@ -175,6 +175,10 @@ class SolarPackage(models.Model):
     
     # Pricing & payment
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
+    deposit_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="Upfront deposit amount (0 = equal installments or cash)"
+    )
     payment_type = models.CharField(
         max_length=20,
         choices=PAYMENT_TYPE_CHOICES,
@@ -221,9 +225,25 @@ class SolarPackage(models.Model):
         return f"{self.name} ({self.system_size_kw}kW)"
 
     @property
-    def monthly_payment(self):
-        """Calculate monthly payment for installment plans."""
+    def installment_amount(self):
+        """Calculate each installment amount after deposit."""
         if self.installment_months and self.installment_months > 0:
+            remaining = self.total_price - (self.deposit_amount or 0)
+            num_installments = self.installment_months - (1 if self.deposit_amount else 0)
+            if num_installments > 0:
+                return remaining / num_installments
+            return remaining
+        return None
+
+    @property
+    def monthly_payment(self):
+        """Calculate monthly payment for installment plans.
+
+        If a deposit is set, returns the installment amount after deposit.
+        Otherwise falls back to equal division."""
+        if self.installment_months and self.installment_months > 0:
+            if self.deposit_amount:
+                return self.installment_amount
             return self.total_price / self.installment_months
         return None
 

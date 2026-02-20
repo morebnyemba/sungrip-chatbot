@@ -438,8 +438,17 @@ def build_packages_interactive_list(contact, context: dict, params: dict) -> dic
 
             # Build description — WhatsApp max is 72 chars
             if pkg.payment_type == 'installment' and pkg.installment_months:
-                monthly = pkg.total_price / pkg.installment_months
-                desc = f"{pkg.system_size_kw}kW · ${pkg.total_price:,.0f} (${monthly:,.0f}/mo)"
+                if pkg.deposit_amount:
+                    remaining = pkg.total_price - pkg.deposit_amount
+                    num_payments = pkg.installment_months - 1
+                    installment = remaining / num_payments if num_payments else remaining
+                    desc = (
+                        f"{pkg.system_size_kw}kW · ${pkg.deposit_amount:,.0f} dep "
+                        f"+ ${installment:,.0f}×{num_payments}"
+                    )
+                else:
+                    monthly = pkg.total_price / pkg.installment_months
+                    desc = f"{pkg.system_size_kw}kW · ${pkg.total_price:,.0f} (${monthly:,.0f}/mo)"
             else:
                 desc = f"{pkg.system_size_kw}kW · ${pkg.total_price:,.0f}"
 
@@ -578,10 +587,21 @@ def fetch_package_details(contact, context: dict, params: dict) -> dict:
         lines.append(f"🏠 *Recommended for:* {pkg.get_recommended_for_display()}")
 
         # ── Pricing & payment info ──
-        lines.append(f"💰 *Price:* ${pkg.total_price:,.0f} USD")
+        lines.append(f"💰 *Total Price:* ${pkg.total_price:,.0f} USD")
         if pkg.payment_type == 'installment' and pkg.installment_months:
-            monthly = pkg.total_price / pkg.installment_months
-            lines.append(f"📆 *Payment Plan:* {pkg.installment_months} months × ${monthly:,.0f}/mo")
+            if pkg.deposit_amount:
+                remaining = pkg.total_price - pkg.deposit_amount
+                num_payments = pkg.installment_months - 1
+                installment = remaining / num_payments if num_payments else remaining
+                lines.append(
+                    f"💳 *Deposit:* ${pkg.deposit_amount:,.0f}"
+                )
+                lines.append(
+                    f"📆 *Then:* ${installment:,.0f}/month × {num_payments} months"
+                )
+            else:
+                monthly = pkg.total_price / pkg.installment_months
+                lines.append(f"📆 *Payment Plan:* {pkg.installment_months} months × ${monthly:,.0f}/mo")
         else:
             lines.append("💵 *Payment:* Cash on delivery & installation")
         lines.append("")
@@ -641,10 +661,19 @@ def fetch_package_details(contact, context: dict, params: dict) -> dict:
 
         # Map payment_type → raw interactive ID used by LABEL_MAPS
         if pkg.payment_type == 'installment' and pkg.installment_months:
-            monthly = pkg.total_price / pkg.installment_months
-            context['package_payment_label'] = (
-                f"📆 {pkg.installment_months}-Month Plan (${monthly:,.0f}/mo)"
-            )
+            if pkg.deposit_amount:
+                remaining = pkg.total_price - pkg.deposit_amount
+                num_payments = pkg.installment_months - 1
+                installment = remaining / num_payments if num_payments else remaining
+                context['package_payment_label'] = (
+                    f"💳 ${pkg.deposit_amount:,.0f} deposit + "
+                    f"${installment:,.0f}/mo × {num_payments}"
+                )
+            else:
+                monthly = pkg.total_price / pkg.installment_months
+                context['package_payment_label'] = (
+                    f"📆 {pkg.installment_months}-Month Plan (${monthly:,.0f}/mo)"
+                )
             context['payment_preference'] = f"installment_{pkg.installment_months}"
         else:
             context['package_payment_label'] = "💵 Cash on Delivery"
