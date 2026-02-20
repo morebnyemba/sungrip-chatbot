@@ -265,6 +265,7 @@ PACKAGES = [
         "system_size_kw": 3.5,
         "recommended_for": "small_home",
         "total_price": 1600,
+        "deposit_amount": 325,
         "payment_type": "installment",
         "installment_months": 6,
         "installation_included": True,
@@ -287,9 +288,9 @@ PACKAGES = [
         ],
         "features": [
             "6-month payment plan",
+            "$325 deposit, then $255/month × 5",
             "Professional supply & installation",
             "Warranty & after-service support",
-            "Solar system on credit",
         ],
     },
     {
@@ -303,6 +304,7 @@ PACKAGES = [
         "system_size_kw": 4.2,
         "recommended_for": "medium_home",
         "total_price": 1900,
+        "deposit_amount": 325,
         "payment_type": "installment",
         "installment_months": 6,
         "installation_included": True,
@@ -326,9 +328,9 @@ PACKAGES = [
         ],
         "features": [
             "6-month payment plan",
+            "$325 deposit, then $315/month × 5",
             "Professional supply & installation",
             "Warranty & after-service support",
-            "Solar system on credit",
         ],
     },
     {
@@ -342,6 +344,7 @@ PACKAGES = [
         "system_size_kw": 6.2,
         "recommended_for": "large_home",
         "total_price": 2450,
+        "deposit_amount": 1000,
         "payment_type": "installment",
         "installment_months": 6,
         "installation_included": True,
@@ -361,9 +364,9 @@ PACKAGES = [
         ],
         "features": [
             "6-month payment plan",
+            "$1,000 deposit, then $290/month × 5",
             "Professional supply & installation",
             "Warranty & after-service support",
-            "Solar system on credit",
         ],
     },
 ]
