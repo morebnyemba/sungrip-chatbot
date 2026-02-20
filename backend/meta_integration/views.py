@@ -440,6 +440,16 @@ class MetaWebhookAPIView(View):
             self._handle_flow_response(msg_data, contact, active_config, log_entry)
             return
 
+        # Check if this is a payment method selection button reply
+        # (matches hanna — intercept pay_* / paynow_* button replies before flow engine)
+        if message_type == "interactive":
+            interactive_payload = msg_data.get("interactive", {})
+            if interactive_payload.get("type") == "button_reply":
+                button_id = interactive_payload.get("button_reply", {}).get("id", "")
+                if button_id.startswith("pay_") or button_id.startswith("paynow_"):
+                    self._handle_payment_method_selection(msg_data, contact, active_config, log_entry)
+                    return
+
         # Check if this is an ORDER message from WhatsApp Commerce Catalog
         # (matches hanna pattern — orders are handled outside the flow engine)
         if message_type == "order":
@@ -594,6 +604,155 @@ class MetaWebhookAPIView(View):
             )
 
         # Send read receipt
+        self._send_read_receipt(whatsapp_message_id, active_config)
+
+    # -----------------------------------------------------------------------
+    # _handle_payment_method_selection — matches hanna's payment button handler
+    # -----------------------------------------------------------------------
+    def _handle_payment_method_selection(self, msg_data: dict, contact, active_config: MetaAppConfig, log_entry: WebhookEventLog):
+        """
+        Handle pay_* and paynow_* button replies from payment method selection.
+
+        Button ID patterns:
+            pay_paynow_<ORDER_NUM>  → show Paynow sub-options (Ecocash / InnBucks)
+            pay_manual_<ORDER_NUM>  → send bank-transfer instructions
+            paynow_ecocash_<ORDER_NUM>  → initiate Ecocash payment
+            paynow_innbucks_<ORDER_NUM> → initiate InnBucks payment
+        """
+        from meta_integration.utils import send_whatsapp_message
+        from orders.models import Order
+
+        interactive_payload = msg_data.get("interactive", {})
+        button_id = interactive_payload.get("button_reply", {}).get("id", "")
+        whatsapp_message_id = msg_data.get("id")
+
+        logger.info(f"Payment button pressed: '{button_id}' by {contact.phone_number}")
+
+        # Extract order number from button ID  (last segment after the prefix)
+        parts = button_id.split("_")
+        # pay_paynow_WA-12345 → ['pay','paynow','WA-12345']
+        # pay_manual_WA-12345 → ['pay','manual','WA-12345']
+        # paynow_ecocash_WA-12345 → ['paynow','ecocash','WA-12345']
+        order_number = parts[-1] if len(parts) >= 3 else None
+
+        if not order_number:
+            logger.warning(f"Could not extract order number from button_id: {button_id}")
+            send_whatsapp_message(
+                to_phone_number=contact.phone_number,
+                message_type='text',
+                data={'body': 'Sorry, something went wrong. Please type "menu" to start over.'},
+            )
+            self._send_read_receipt(whatsapp_message_id, active_config)
+            return
+
+        # Verify order exists
+        order = Order.objects.filter(order_number=order_number).first()
+        if not order:
+            logger.warning(f"Order {order_number} not found for payment button {button_id}")
+            send_whatsapp_message(
+                to_phone_number=contact.phone_number,
+                message_type='text',
+                data={'body': f'Order {order_number} was not found. Please type "menu" for help.'},
+            )
+            self._send_read_receipt(whatsapp_message_id, active_config)
+            return
+
+        # ---- Route based on button prefix ----
+
+        if button_id.startswith("pay_paynow_"):
+            # Show Paynow sub-options
+            paynow_buttons = {
+                "type": "button",
+                "header": {"type": "text", "text": "\ud83d\udcb0 Paynow Payment"},
+                "body": {
+                    "text": (
+                        f"Select your Paynow method for order #{order_number}:\n\n"
+                        f"Total: ${order.total_amount} {order.currency}"
+                    )
+                },
+                "footer": {"text": "Choose your mobile money provider"},
+                "action": {
+                    "buttons": [
+                        {
+                            "type": "reply",
+                            "reply": {
+                                "id": f"paynow_ecocash_{order_number}",
+                                "title": "\ud83d\udcf1 Ecocash",
+                            },
+                        },
+                        {
+                            "type": "reply",
+                            "reply": {
+                                "id": f"paynow_innbucks_{order_number}",
+                                "title": "\ud83d\udcb3 InnBucks",
+                            },
+                        },
+                    ]
+                },
+            }
+            send_whatsapp_message(
+                to_phone_number=contact.phone_number,
+                message_type='interactive',
+                data=paynow_buttons,
+            )
+
+        elif button_id.startswith("pay_manual_"):
+            # Send bank transfer instructions
+            bank_instructions = (
+                f"\ud83c\udfe6 *Bank Transfer Details*\n\n"
+                f"*Order:* #{order_number}\n"
+                f"*Amount:* ${order.total_amount} {order.currency}\n\n"
+                f"*Bank:* CBZ Bank\n"
+                f"*Account Name:* Sungrip Solar\n"
+                f"*Account Number:* 12345678901\n"
+                f"*Branch:* Harare\n\n"
+                f"\u26a0\ufe0f Please use your order number *{order_number}* as the payment reference.\n\n"
+                f"Once payment is made, please send proof of payment here or "
+                f"to our WhatsApp number. We will confirm and process your order."
+            )
+            send_whatsapp_message(
+                to_phone_number=contact.phone_number,
+                message_type='text',
+                data={'body': bank_instructions},
+            )
+
+        elif button_id.startswith("paynow_ecocash_") or button_id.startswith("paynow_innbucks_"):
+            # Determine payment method
+            method = "ecocash" if "ecocash" in button_id else "innbucks"
+            method_label = "Ecocash" if method == "ecocash" else "InnBucks"
+
+            # TODO: Integrate real Paynow SDK here.
+            # For now send instructions to pay via the selected method.
+            payment_instructions = (
+                f"\ud83d\udcb0 *{method_label} Payment*\n\n"
+                f"*Order:* #{order_number}\n"
+                f"*Amount:* ${order.total_amount} {order.currency}\n\n"
+                f"To complete your payment via {method_label}:\n"
+                f"1. Dial *151*2*1# (Ecocash)* or open *InnBucks App*\n"
+                f"2. Send *${order.total_amount}* to merchant code / number provided by our team\n"
+                f"3. Use reference: *{order_number}*\n\n"
+                f"Our team will confirm your payment shortly. "
+                f"If you need help, type \"menu\"."
+            )
+            send_whatsapp_message(
+                to_phone_number=contact.phone_number,
+                message_type='text',
+                data={'body': payment_instructions},
+            )
+            logger.info(f"Sent {method_label} payment instructions for order {order_number}")
+
+        else:
+            logger.warning(f"Unrecognised payment button_id pattern: {button_id}")
+            send_whatsapp_message(
+                to_phone_number=contact.phone_number,
+                message_type='text',
+                data={'body': 'Sorry, that option is not available. Please type "menu" for help.'},
+            )
+
+        # Update log
+        if log_entry and log_entry.pk:
+            self._save_log(log_entry, 'processed', f'Payment button: {button_id}')
+
         self._send_read_receipt(whatsapp_message_id, active_config)
 
     # -----------------------------------------------------------------------
