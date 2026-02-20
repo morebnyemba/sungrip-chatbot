@@ -1746,51 +1746,7 @@ def process_order_from_catalog(
                 f"{contact.phone_number}: {exc}"
             )
 
-        # 8. Send payment method selection buttons
-        try:
-            payment_message = {
-                "type": "button",
-                "header": {"type": "text", "text": "💳 Select Payment Method"},
-                "body": {
-                    "text": (
-                        f"How would you like to pay for order "
-                        f"#{order_number}?\n\n"
-                        f"Total: ${total_amount:.2f} {currency}"
-                    )
-                },
-                "footer": {"text": "Choose your preferred payment option"},
-                "action": {
-                    "buttons": [
-                        {
-                            "type": "reply",
-                            "reply": {
-                                "id": f"pay_paynow_{order_number}",
-                                "title": "💰 Pay with Paynow",
-                            },
-                        },
-                        {
-                            "type": "reply",
-                            "reply": {
-                                "id": f"pay_manual_{order_number}",
-                                "title": "🏦 Manual Payment",
-                            },
-                        },
-                    ]
-                },
-            }
-            send_whatsapp_message(
-                to_phone_number=contact.phone_number,
-                message_type='interactive',
-                data=payment_message,
-            )
-            logger.info(f"Sent payment method selection for order {order_number}")
-        except Exception as exc:
-            logger.warning(
-                f"Could not send payment method selection: {exc}. "
-                f"Order was still created successfully."
-            )
-
-        # 9. Notify team via notification system
+        # 8. Notify team via notification system
         try:
             from notifications.tasks import send_notification_task
 
