@@ -1393,3 +1393,77 @@ def save_product_enquiry(contact, context: dict, params: dict) -> dict:
         context['enquiry_reference'] = ''
 
     return context
+
+
+# ---------------------------------------------------------------------------
+#  WhatsApp Commerce Catalog  (matches hanna pattern)
+# ---------------------------------------------------------------------------
+
+@register_flow_action('send_catalog_message')
+def send_catalog_message(contact, context: dict, params: dict) -> dict:
+    """
+    Send the WhatsApp Commerce Catalog to the user.
+
+    Instead of listing products inside the chatbot, this opens WhatsApp's
+    native catalog browsing UI.  The user adds items to a cart and submits
+    an order — WhatsApp then posts an ``order`` webhook that we handle in
+    ``_handle_order_message`` (meta_integration/views.py).
+
+    Expected params (all optional):
+        body_text:   Catalog body text shown to the user.
+        footer_text: Small footer line.
+        thumbnail_sku: SKU of the product whose image becomes the header.
+    """
+    from meta_integration.models import MetaAppConfig
+
+    try:
+        active_config = MetaAppConfig.objects.get_active_config()
+        catalog_id = active_config.catalog_id
+    except Exception:
+        catalog_id = None
+
+    if not catalog_id:
+        logger.error("send_catalog_message: No catalog_id configured in MetaAppConfig")
+        context['_catalog_sent'] = False
+        return context
+
+    body_text = params.get(
+        'body_text',
+        "🛒 *Sungrip Solar Product Catalog*\n\n"
+        "Browse our range of solar panels, inverters, batteries and accessories below.\n\n"
+        "Add items to your cart and submit your order — we'll confirm it right here on WhatsApp!"
+    )
+    footer_text = params.get('footer_text', 'Tap on a product to view details')
+    thumbnail_sku = params.get('thumbnail_sku')
+
+    interactive_payload = {
+        "type": "catalog_message",
+        "body": {"text": body_text},
+        "action": {
+            "name": "catalog_message",
+        },
+    }
+
+    if footer_text:
+        interactive_payload["footer"] = {"text": footer_text}
+
+    # Optional: highlight a specific product as the catalog thumbnail
+    if thumbnail_sku:
+        interactive_payload["action"]["parameters"] = {
+            "thumbnail_product_retailer_id": thumbnail_sku,
+        }
+
+    context['_dynamic_messages'] = context.get('_dynamic_messages', [])
+    context['_dynamic_messages'].append({
+        'type': 'send_whatsapp_message',
+        'recipient_wa_id': contact.phone_number,
+        'message_type': 'interactive',
+        'data': interactive_payload,
+    })
+    context['_catalog_sent'] = True
+
+    logger.info(
+        f"send_catalog_message: Queued catalog message for "
+        f"{contact.phone_number} (catalog_id={catalog_id})"
+    )
+    return context

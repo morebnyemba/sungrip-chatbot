@@ -1563,3 +1563,218 @@ def process_whatsapp_flow_response(msg_data: dict, contact: 'Contact', app_confi
     except Exception as e:
         logger.error(f"Error handling flow response: {e}", exc_info=True)
         return False, f'Exception processing flow: {str(e)[:200]}'
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp Catalog order processing  (matches hanna pattern)
+# ---------------------------------------------------------------------------
+
+def process_order_from_catalog(
+    msg_data: dict,
+    contact: 'Contact',
+) -> Tuple[bool, str]:
+    """
+    Process an incoming ``order`` message from the WhatsApp Commerce Catalog.
+
+    WhatsApp sends this payload when a customer submits their cart:
+
+        {
+            "type": "order",
+            "order": {
+                "catalog_id": "...",
+                "product_items": [
+                    {
+                        "product_retailer_id": "SKU-001",
+                        "quantity": "2",
+                        "item_price": "15000",
+                        "currency": "USD"
+                    }
+                ],
+                "text": "optional customer note"
+            }
+        }
+
+    The function:
+    1. Gets or creates a Customer record for the contact.
+    2. Looks up each product by SKU (``product_retailer_id``).
+    3. Creates an Order + OrderItems.
+    4. Sends a confirmation message back to the customer.
+    5. Sends a team notification about the new order.
+
+    Returns (success: bool, notes: str).
+    """
+    import random
+    from decimal import Decimal, InvalidOperation
+
+    from customers.models import Customer
+    from orders.models import Order, OrderItem
+    from products.models import Product
+    from meta_integration.services import WhatsAppMessageService
+
+    order_data = msg_data.get('order', {})
+    catalog_id = order_data.get('catalog_id', '')
+    product_items = order_data.get('product_items', [])
+    customer_note = order_data.get('text', '')
+
+    if not product_items:
+        logger.warning(
+            f"process_order_from_catalog: No product_items in order "
+            f"from {contact.phone_number}"
+        )
+        return False, 'No product items in order'
+
+    try:
+        # 1. Get or create Customer
+        customer, _ = Customer.objects.get_or_create(
+            phone_number=contact.phone_number,
+            defaults={
+                'full_name': contact.profile_name or contact.phone_number,
+                'whatsapp_number': contact.phone_number,
+            },
+        )
+
+        # 2. Resolve products by SKU
+        skus = [
+            item.get('product_retailer_id', '')
+            for item in product_items
+            if item.get('product_retailer_id')
+        ]
+        products_by_sku = {
+            p.sku: p
+            for p in Product.objects.filter(sku__in=skus)
+        }
+
+        # 3. Calculate totals and build line items
+        line_items = []
+        total_amount = Decimal('0')
+        currency = 'USD'
+        item_lines = []  # for the confirmation message
+
+        for item in product_items:
+            sku = item.get('product_retailer_id', '')
+            try:
+                qty = int(item.get('quantity', 1))
+            except (ValueError, TypeError):
+                qty = 1
+
+            # Meta sends price in cents (minor currency units)
+            try:
+                raw_price = Decimal(str(item.get('item_price', '0')))
+                unit_price = raw_price / Decimal('100')
+            except (InvalidOperation, TypeError):
+                unit_price = Decimal('0')
+
+            currency = item.get('currency', 'USD')
+            line_total = unit_price * qty
+            total_amount += line_total
+
+            product_obj = products_by_sku.get(sku)
+            product_name = product_obj.name if product_obj else sku
+
+            line_items.append({
+                'product': product_obj,
+                'sku': sku,
+                'name': product_name,
+                'quantity': qty,
+                'unit_price': unit_price,
+                'total_price': line_total,
+            })
+            item_lines.append(f"  • {product_name} × {qty} = ${line_total:.2f}")
+
+        # 4. Generate unique order number
+        order_number = f"WA-{random.randint(10000, 99999)}"
+        while Order.objects.filter(order_number=order_number).exists():
+            order_number = f"WA-{random.randint(10000, 99999)}"
+
+        # 5. Create Order
+        order = Order.objects.create(
+            customer=customer,
+            order_number=order_number,
+            subtotal=total_amount,
+            total_amount=total_amount,
+            currency=currency,
+            status='pending',
+            payment_status='unpaid',
+            customer_notes=(
+                f"Order placed via WhatsApp Catalog.\n"
+                f"Catalog ID: {catalog_id}\n"
+                f"Customer Note: {customer_note}"
+            ),
+        )
+
+        # 6. Create OrderItems
+        for li in line_items:
+            OrderItem.objects.create(
+                order=order,
+                product=li['product'] or Product.objects.filter(sku=li['sku']).first(),
+                quantity=li['quantity'],
+                unit_price=li['unit_price'],
+                total_price=li['total_price'],
+            )
+
+        logger.info(
+            f"Created catalog order {order_number} for "
+            f"{contact.phone_number}: {len(line_items)} items, "
+            f"total ${total_amount:.2f} {currency}"
+        )
+
+        # 7. Send confirmation message to customer
+        items_text = '\n'.join(item_lines)
+        confirmation = (
+            f"🎉 *Thank you for your order!*\n\n"
+            f"📦 *Order Number:* {order_number}\n"
+            f"📋 *Items:*\n{items_text}\n\n"
+            f"💰 *Total:* ${total_amount:.2f} {currency}\n\n"
+            f"Our team will contact you shortly to confirm "
+            f"payment and delivery details."
+        )
+
+        try:
+            service = WhatsAppMessageService()
+            service.send_text_message(contact.phone_number, confirmation)
+        except Exception as exc:
+            logger.error(
+                f"Failed to send order confirmation to "
+                f"{contact.phone_number}: {exc}"
+            )
+
+        # 8. Notify team via notification system
+        try:
+            from notifications.tasks import send_notification_task
+
+            notification_context = {
+                'customer_name': customer.full_name,
+                'customer_phone': contact.phone_number,
+                'order_number': order_number,
+                'items_summary': items_text,
+                'total_amount': f"${total_amount:.2f} {currency}",
+                'customer_note': customer_note or '(none)',
+            }
+            send_notification_task.delay(
+                template_name='new_catalog_order',
+                context=notification_context,
+                group='sales_team',
+            )
+        except Exception as exc:
+            # Notification failure should not block order creation
+            logger.warning(f"Team notification failed for order {order_number}: {exc}")
+
+        return True, f'Order {order_number} created with {len(line_items)} items'
+
+    except Exception as exc:
+        logger.error(
+            f"process_order_from_catalog error for "
+            f"{contact.phone_number}: {exc}",
+            exc_info=True,
+        )
+        # Try to inform the customer
+        try:
+            service = WhatsAppMessageService()
+            service.send_text_message(
+                contact.phone_number,
+                "Sorry, we couldn't process your order right now. "
+                "Please try again or contact us for assistance."
+            )
+        except Exception:
+            pass
+        return False, f'Error: {str(exc)[:200]}'

@@ -440,6 +440,12 @@ class MetaWebhookAPIView(View):
             self._handle_flow_response(msg_data, contact, active_config, log_entry)
             return
 
+        # Check if this is an ORDER message from WhatsApp Commerce Catalog
+        # (matches hanna pattern — orders are handled outside the flow engine)
+        if message_type == "order":
+            self._handle_order_message(msg_data, contact, active_config, log_entry)
+            return
+
         # Parse message timestamp
         message_timestamp_str = msg_data.get("timestamp")
         message_timestamp = None
@@ -507,6 +513,85 @@ class MetaWebhookAPIView(View):
             )
             if log_entry and log_entry.pk:
                 self._save_log(log_entry, 'failed', f"Critical error before queueing flow: {str(e)[:200]}")
+
+        # Send read receipt
+        self._send_read_receipt(whatsapp_message_id, active_config)
+
+    # -----------------------------------------------------------------------
+    # _handle_order_message — WhatsApp Commerce Catalog orders (matches hanna)
+    # -----------------------------------------------------------------------
+    def _handle_order_message(self, msg_data: dict, contact, active_config: MetaAppConfig, log_entry: WebhookEventLog):
+        """
+        Handle incoming ``order`` messages from the WhatsApp Commerce Catalog.
+
+        When a customer browses the native WhatsApp catalog, adds items to
+        their cart, and taps "Send", WhatsApp delivers a message with
+        type="order".  This method delegates to ``process_order_from_catalog``
+        which creates Order + OrderItems and sends a confirmation.
+        """
+        from flows.services import process_order_from_catalog
+        from conversations.models import Conversation
+
+        whatsapp_message_id = msg_data.get("id")
+
+        logger.info(
+            f"Processing catalog order from {contact.phone_number} "
+            f"(WAMID: {whatsapp_message_id})"
+        )
+
+        # Parse timestamp
+        message_timestamp_str = msg_data.get("timestamp")
+        message_timestamp = None
+        if message_timestamp_str:
+            try:
+                message_timestamp = timezone.make_aware(
+                    datetime.fromtimestamp(int(message_timestamp_str))
+                )
+            except ValueError:
+                pass
+        if not message_timestamp:
+            message_timestamp = timezone.now()
+
+        # Store the order message in the conversation log
+        conversation = Conversation.objects.filter(
+            contact=contact, status='active'
+        ).first()
+        if not conversation:
+            conversation = Conversation.objects.create(
+                contact=contact,
+                title=f"Chat with {contact.profile_name or contact.phone_number}",
+                status='active',
+            )
+
+        # Summarize order items for the message content
+        items = msg_data.get('order', {}).get('product_items', [])
+        content_text = f"[Catalog Order: {len(items)} item(s)]"
+
+        Message.objects.update_or_create(
+            message_id=whatsapp_message_id,
+            defaults={
+                'contact': contact,
+                'conversation': conversation,
+                'app_config': active_config,
+                'direction': 'inbound',
+                'message_type': 'order',
+                'content_payload': msg_data,
+                'content': content_text,
+                'timestamp': message_timestamp,
+                'status': 'received',
+                'status_timestamp': message_timestamp,
+            },
+        )
+
+        # Process the order (creates DB records, sends confirmation)
+        success, notes = process_order_from_catalog(msg_data, contact)
+
+        if log_entry and log_entry.pk:
+            self._save_log(
+                log_entry,
+                'processed' if success else 'failed',
+                notes,
+            )
 
         # Send read receipt
         self._send_read_receipt(whatsapp_message_id, active_config)

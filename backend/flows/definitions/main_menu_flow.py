@@ -190,12 +190,34 @@ MAIN_MENU_FLOW = {
         },
         {
             "name": "route_to_catalog",
-            "type": "switch_flow",
+            "type": "action",
             "config": {
-                "target_flow_name": "product_catalog",
-                "message": "Let me show you our product catalog. 🛒",
-                "initial_context_template": {}
+                "actions_to_run": [
+                    {
+                        "action_type": "send_catalog_message",
+                        "parameters": {
+                            "body_text": "🛒 *Sungrip Solar Product Catalog*\n\nBrowse our products below. Add items to your cart and tap *Send* to place your order — we'll confirm it right here on WhatsApp!",
+                            "footer_text": "Tap on a product to view details"
+                        }
+                    },
+                    {
+                        "action_type": "send_dynamic_message",
+                        "parameters": {}
+                    }
+                ]
             },
+            "transitions": [
+                {
+                    "to_step": "end_after_catalog",
+                    "condition_config": {"type": "always_true"},
+                    "priority": 1
+                }
+            ]
+        },
+        {
+            "name": "end_after_catalog",
+            "type": "end_flow",
+            "config": {},
             "transitions": []
         },
         {
