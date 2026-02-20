@@ -23,6 +23,8 @@ from django.conf import settings
 
 from .models import MetaAppConfig
 
+DEFAULT_PRODUCT_LINK = "https://sungripsolar.co.zw"
+
 logger = logging.getLogger(__name__)
 
 # Static placeholder image path for products without images
@@ -84,6 +86,7 @@ class MetaCatalogService:
             "currency": product.currency,
             "condition": "new",
             "availability": "in stock" if product.stock_quantity > 0 else "out of stock",
+            "link": getattr(product, 'website_url', None) or DEFAULT_PRODUCT_LINK,
         }
 
         if product.short_description:
@@ -130,6 +133,7 @@ class MetaCatalogService:
         data = self._get_product_data(product)
 
         logger.info(f"Creating product in Meta Catalog: {product.name} (SKU: {product.sku})")
+        logger.debug(f"Payload: {json.dumps(data, indent=2)}")
         response = requests.post(
             url, headers=self._get_headers(), json=data, timeout=30
         )
@@ -219,16 +223,30 @@ class MetaCatalogService:
         except requests.exceptions.HTTPError:
             try:
                 error_details = response.json()
-                error_msg = error_details.get('error', {}).get('message', str(error_details))
-                error_code = error_details.get('error', {}).get('code', response.status_code)
+                error_obj = error_details.get('error', {})
+                error_msg = error_obj.get('message', str(error_details))
+                error_code = error_obj.get('code', response.status_code)
+                error_type = error_obj.get('type', 'Unknown')
+                error_subcode = error_obj.get('error_subcode', '')
+                error_user_title = error_obj.get('error_user_title', '')
+                error_user_msg = error_obj.get('error_user_msg', '')
             except (ValueError, KeyError):
                 error_msg = response.text
                 error_code = response.status_code
+                error_type = 'Unknown'
+                error_subcode = ''
+                error_user_title = ''
+                error_user_msg = ''
 
             logger.error(
                 f"Meta API error ({operation}) for '{product.name}' "
                 f"(SKU: {product.sku}): [{error_code}] {error_msg}"
             )
+            if error_subcode or error_user_msg:
+                logger.error(
+                    f"  -> subcode={error_subcode} type={error_type} "
+                    f"title='{error_user_title}' detail='{error_user_msg}'"
+                )
             raise ValueError(
                 f"Meta API Error ({error_code}): {error_msg}"
             )
