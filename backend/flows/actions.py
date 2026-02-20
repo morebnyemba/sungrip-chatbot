@@ -414,10 +414,11 @@ def build_packages_interactive_list(contact, context: dict, params: dict) -> dic
             context['_package_id_map'] = {}
             return context
 
-        # Group packages by payment type into sections
+        # Group packages by payment type + installment duration
         # WhatsApp allows max 10 rows total across all sections
         cash_rows = []
-        plan_rows = []
+        plan_3mo_rows = []
+        plan_6mo_rows = []
         id_map = {}
         total_rows = 0
         MAX_ROWS = 10
@@ -450,8 +451,10 @@ def build_packages_interactive_list(contact, context: dict, params: dict) -> dic
             id_map[row_id] = pkg.pk
             total_rows += 1
 
-            if pkg.payment_type == 'installment':
-                plan_rows.append(row)
+            if pkg.payment_type == 'installment' and pkg.installment_months == 3:
+                plan_3mo_rows.append(row)
+            elif pkg.payment_type == 'installment':
+                plan_6mo_rows.append(row)
             else:
                 cash_rows.append(row)
 
@@ -468,10 +471,15 @@ def build_packages_interactive_list(contact, context: dict, params: dict) -> dic
                 'title': '💵 Cash on Delivery',
                 'rows': cash_rows
             })
-        if plan_rows:
+        if plan_3mo_rows:
+            sections.append({
+                'title': '🔥 3-Month Payment Plan',
+                'rows': plan_3mo_rows
+            })
+        if plan_6mo_rows:
             sections.append({
                 'title': '📆 6-Month Payment Plan',
-                'rows': plan_rows
+                'rows': plan_6mo_rows
             })
 
         context['_packages_list_msg'] = {
@@ -483,7 +491,8 @@ def build_packages_interactive_list(contact, context: dict, params: dict) -> dic
                     'text': (
                         "Browse our solar energy packages below.\n\n"
                         "💵 *Cash* — pay on delivery & installation\n"
-                        "📆 *6-Month Plan* — spread the cost\n\n"
+                        "� *3-Month Plan* — short-term credit\n"
+                        "�📆 *6-Month Plan* — spread the cost\n\n"
                         "Each package includes panels, inverter, battery "
                         "& professional installation.\n\n"
                         "Tap a package for full details 👇"
@@ -669,6 +678,7 @@ def fetch_package_details(contact, context: dict, params: dict) -> dict:
 LABEL_MAPS = {
     'payment_preference': {
         'cash': '💵 Cash / Full Payment',
+        'installment_3': '🔥 3-Month Payment Plan',
         'installment_6': '📆 6-Month Payment Plan',
     },
     'system_size': {

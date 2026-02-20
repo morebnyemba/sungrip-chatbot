@@ -143,11 +143,13 @@ INSTALLATION_SCHEDULING_FLOW = {
                             "text": "Thanks for submitting the form! Just a couple more details.\n\n"
                                    "How would you like to pay?\n\n"
                                    "💵 *Cash* \u2014 Pay on delivery & installation\n"
+                                   "� *3-Month Plan* \u2014 Short-term credit\n"
                                    "📆 *6-Month Plan* \u2014 Spread cost over 6 months"
                         },
                         "action": {
                             "buttons": [
                                 {"type": "reply", "reply": {"id": "cash", "title": "💵 Cash / Full"}},
+                                {"type": "reply", "reply": {"id": "installment_3", "title": "🔥 3-Month Plan"}},
                                 {"type": "reply", "reply": {"id": "installment_6", "title": "📆 6-Month Plan"}}
                             ]
                         }
@@ -276,11 +278,13 @@ INSTALLATION_SCHEDULING_FLOW = {
                         "body": {
                             "text": "How would you like to pay?\n\n"
                                    "💵 *Cash* — Pay on delivery & installation\n"
+                                   "� *3-Month Plan* — Short-term credit\n"
                                    "📆 *6-Month Plan* — Spread cost over 6 months"
                         },
                         "action": {
                             "buttons": [
                                 {"type": "reply", "reply": {"id": "cash", "title": "💵 Cash / Full"}},
+                                {"type": "reply", "reply": {"id": "installment_3", "title": "🔥 3-Month Plan"}},
                                 {"type": "reply", "reply": {"id": "installment_6", "title": "📆 6-Month Plan"}}
                             ]
                         }
