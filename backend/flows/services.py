@@ -274,6 +274,11 @@ def _execute_step_actions(
                 action_func = flow_action_registry.get(action_type)
                 if action_func:
                     context = action_func(contact, context, resolved_params)
+                    # Consume _dynamic_messages queued by the action
+                    # (matches hanna pattern where actions return action dicts)
+                    dynamic_msgs = context.pop('_dynamic_messages', [])
+                    for dm in dynamic_msgs:
+                        actions.append(dm)
                 elif action_type == 'update_context':
                     context.update(resolved_params)
                 elif action_type == 'send_whatsapp_flow':

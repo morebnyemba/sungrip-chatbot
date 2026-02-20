@@ -195,14 +195,10 @@ MAIN_MENU_FLOW = {
                 "actions_to_run": [
                     {
                         "action_type": "send_catalog_message",
-                        "parameters": {
+                        "params_template": {
                             "body_text": "🛒 *Sungrip Solar Product Catalog*\n\nBrowse our products below. Add items to your cart and tap *Send* to place your order — we'll confirm it right here on WhatsApp!",
                             "footer_text": "Tap on a product to view details"
                         }
-                    },
-                    {
-                        "action_type": "send_dynamic_message",
-                        "parameters": {}
                     }
                 ]
             },

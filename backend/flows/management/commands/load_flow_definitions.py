@@ -16,7 +16,6 @@ from flows.definitions.solar_quote_flow import SOLAR_QUOTE_FLOW
 from flows.definitions.installation_scheduling_flow import INSTALLATION_SCHEDULING_FLOW
 from flows.definitions.solar_packages_flow import SOLAR_PACKAGES_FLOW
 from flows.definitions.contact_support_flow import CONTACT_SUPPORT_FLOW
-from flows.definitions.product_catalog_flow import PRODUCT_CATALOG_FLOW
 
 
 class Command(BaseCommand):
@@ -34,7 +33,6 @@ class Command(BaseCommand):
             INSTALLATION_SCHEDULING_FLOW,
             SOLAR_PACKAGES_FLOW,
             CONTACT_SUPPORT_FLOW,
-            PRODUCT_CATALOG_FLOW,
         ]
 
         for flow_def in flow_definitions:
