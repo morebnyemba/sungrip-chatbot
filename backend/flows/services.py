@@ -243,6 +243,9 @@ def _execute_step_actions(
                     'validation_regex': reply_config.get('validation_regex'),
                     'validation': reply_config.get('validation', {}),
                     'original_step_id': step.id,
+                    'valid_interactive_ids': _extract_valid_interactive_ids(
+                        message_config
+                    ),
                 }
         except Exception as e:
             logger.error(f"Error in question step '{step.name}': {e}")
@@ -620,6 +623,9 @@ def _handle_fallback(
                     'validation_regex': reply_config.get('validation_regex'),
                     'validation': reply_config.get('validation', {}),
                     'original_step_id': current_step.id,
+                    'valid_interactive_ids': _extract_valid_interactive_ids(
+                        message_config
+                    ),
                 }
 
             logger.info(
@@ -686,6 +692,39 @@ def _default_nudge_for_question(config: dict) -> str:
         if validation_regex:
             return "⚠️ Your response didn't match the expected format. Please try again."
         return "I didn't quite understand that. Please try again."
+
+
+def _extract_valid_interactive_ids(message_config: dict) -> list:
+    """
+    Extract all valid interactive reply IDs (button IDs and list-row IDs)
+    from a question step's message_config.
+
+    Used to detect stale button/list taps from previously sent messages:
+    if the incoming reply ID is not in this list, the tap came from an
+    old message and should be rejected.
+
+    Returns an empty list when the config contains no static interactive
+    options (e.g. dynamically generated content) — in that case all
+    interactive replies are accepted (backward-compatible).
+    """
+    ids: list[str] = []
+    interactive = message_config.get('interactive', {})
+    action = interactive.get('action', {})
+
+    # WhatsApp buttons
+    for btn in action.get('buttons', []):
+        btn_id = btn.get('reply', {}).get('id')
+        if btn_id:
+            ids.append(str(btn_id))
+
+    # WhatsApp list rows
+    for section in action.get('sections', []):
+        for row in section.get('rows', []):
+            row_id = row.get('id')
+            if row_id:
+                ids.append(str(row_id))
+
+    return ids
 
 
 # ---------------------------------------------------------------------------
@@ -904,10 +943,29 @@ def _process_question_reply(
     elif msg_type == 'interactive':
         interactive = message_data.get('interactive', {})
         itype = interactive.get('type')
-        if itype == 'button_reply':
-            return True, interactive.get('button_reply', {}).get('id')
-        elif itype == 'list_reply':
-            return True, interactive.get('list_reply', {}).get('id')
+
+        if itype in ('button_reply', 'list_reply'):
+            if itype == 'button_reply':
+                reply_id = interactive.get('button_reply', {}).get('id')
+            else:
+                reply_id = interactive.get('list_reply', {}).get('id')
+
+            # Guard against stale taps from previously sent messages.
+            # If the question step defined static button/list options we
+            # know which IDs are valid.  An ID that does not appear in
+            # that list came from an old message and must be rejected so
+            # the engine re-prompts the current question instead of
+            # letting an always_true catch-all transition misroute.
+            valid_ids = question_expectation.get('valid_interactive_ids')
+            if valid_ids and str(reply_id) not in valid_ids:
+                logger.info(
+                    f"Stale interactive tap rejected: '{reply_id}' "
+                    f"not in valid IDs {valid_ids}"
+                )
+                return False, None
+
+            return True, reply_id
+
         elif itype == 'nfm_reply':
             nfm = interactive.get('nfm_reply', {})
             resp_json = nfm.get('response_json')
@@ -1095,6 +1153,8 @@ def process_message_for_flow(
                 is_internal = True
 
             # --- Handle question step awaiting reply ---
+            _stale_interactive_tap = False
+
             if (current_step.step_type == 'question'
                     and '_question_awaiting_reply_for' in flow_context):
 
@@ -1124,11 +1184,22 @@ def process_message_for_flow(
                     flow_context.pop('_fallback_count', None)
                     logger.info(f"Saved reply '{variable_name}' = {value_to_save}")
                 elif not reply_valid:
-                    # Store raw text for transition evaluation
+                    # Store raw text for transition evaluation (keyword
+                    # escape hatches like "menu" should still work).
                     if message_data.get('type') == 'text':
                         flow_context['_last_user_reply'] = (
                             message_data.get('text', {}).get('body', '')
                         )
+                    # Interactive button/list taps that failed validation are
+                    # stale clicks from previously sent messages.  Skip
+                    # transition evaluation entirely to prevent always_true
+                    # catch-all transitions from misrouting the flow.
+                    elif message_data.get('type') == 'interactive':
+                        itype = message_data.get(
+                            'interactive', {}
+                        ).get('type', '')
+                        if itype in ('button_reply', 'list_reply'):
+                            _stale_interactive_tap = True
                     logger.info(
                         f"Reply not valid for expected_type="
                         f"{question_exp.get('expected_type')}"
@@ -1157,6 +1228,31 @@ def process_message_for_flow(
                 )
                 session.context_data = flow_context
                 session.save(update_fields=['context_data', 'updated_at'])
+
+            # --- Stale interactive tap: skip transitions, re-prompt ---
+            # A button/list tap from a previously sent message should never
+            # be routed through transitions (an always_true catch-all would
+            # misroute the flow).  Go straight to fallback re-prompt.
+            if _stale_interactive_tap:
+                logger.info(
+                    f"Stale interactive tap at step '{current_step.name}'. "
+                    f"Skipping transitions — re-prompting."
+                )
+                fallback_actions, flow_context = _handle_fallback(
+                    current_step, contact, flow_context, session
+                )
+                actions_to_perform.extend(
+                    a for a in fallback_actions
+                    if not a.get('type', '').startswith('_internal_')
+                )
+                if any(
+                    a.get('type') == '_internal_command_end_flow'
+                    for a in fallback_actions
+                ):
+                    _clear_flow_state(contact)
+                session.context_data = flow_context
+                session.save(update_fields=['context_data', 'updated_at'])
+                break
 
             # --- Evaluate transitions ---
             transitions = current_step.outgoing_transitions.all()
