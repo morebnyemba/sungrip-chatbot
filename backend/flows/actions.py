@@ -34,6 +34,92 @@ def register_flow_action(name):
     return decorator
 
 
+# ---------------------------------------------------------------------------
+# Shared helper: enrich Customer record with data collected during flows
+# ---------------------------------------------------------------------------
+
+def _enrich_customer_profile(contact, context: dict) -> None:
+    """
+    Progressively fill empty fields on the Customer record using data
+    the user provided during a flow.  Only writes to fields that are
+    still blank — never overwrites existing values.
+
+    Called by every save action so the Customer profile gets richer
+    with each interaction.
+    """
+    from customers.models import Customer
+
+    if not contact:
+        return
+
+    try:
+        customer = Customer.objects.filter(
+            phone_number=contact.phone_number
+        ).first()
+        if not customer:
+            return
+
+        updated_fields = []
+
+        # --- Name ---
+        customer_name = context.get('customer_name', '')
+        if customer_name and (not customer.full_name or customer.full_name == 'WhatsApp User'):
+            customer.full_name = customer_name
+            updated_fields.append('full_name')
+
+        # --- Customer type from property_type ---
+        property_type = context.get('property_type', '')
+        PROPERTY_TYPE_MAP = {
+            'residential': 'residential',
+            'commercial': 'commercial',
+            'industrial': 'industrial',
+        }
+        if property_type and customer.customer_type == 'residential':
+            # Normalise display labels back to DB values
+            raw = property_type.lower()
+            for key, val in PROPERTY_TYPE_MAP.items():
+                if key in raw:
+                    if customer.customer_type != val:
+                        customer.customer_type = val
+                        updated_fields.append('customer_type')
+                    break
+
+        # --- City from location ---
+        location = context.get('location', '')
+        if location and not customer.city:
+            customer.city = str(location)[:100]
+            updated_fields.append('city')
+
+        # --- Address from installation_address or delivery_address ---
+        address = (
+            context.get('installation_address')
+            or context.get('delivery_address')
+            or ''
+        )
+        if address and not customer.address_line1:
+            customer.address_line1 = str(address)[:255]
+            updated_fields.append('address_line1')
+
+        # --- GPS from location_pin ---
+        location_pin = context.get('location_pin')
+        if isinstance(location_pin, dict):
+            lat = location_pin.get('latitude')
+            lng = location_pin.get('longitude')
+            if lat and lng and not customer.gps_latitude:
+                customer.gps_latitude = lat
+                customer.gps_longitude = lng
+                updated_fields.extend(['gps_latitude', 'gps_longitude'])
+
+        if updated_fields:
+            customer.save(update_fields=updated_fields)
+            logger.info(
+                f"_enrich_customer_profile: Updated {updated_fields} "
+                f"for {contact.phone_number}"
+            )
+    except Exception as exc:
+        logger.warning(f"_enrich_customer_profile error: {exc}")
+
+
 @register_flow_action('map_wa_response')
 def map_wa_response(contact, context: dict, params: dict) -> dict:
     """
@@ -247,6 +333,9 @@ def save_quote_request(contact, context: dict, params: dict) -> dict:
         logger.info(f"Quote request saved to database: {quote_request}")
         
         context[save_to_var] = quote_request
+
+        # Enrich Customer profile with collected data
+        _enrich_customer_profile(contact, context)
         
     except Exception as e:
         logger.error(f"Error saving quote request: {e}", exc_info=True)
@@ -316,6 +405,9 @@ def save_installation_request(contact, context: dict, params: dict) -> dict:
         }
         logger.info(f"Installation request saved: {request_id}")
 
+        # Enrich Customer profile with collected data
+        _enrich_customer_profile(contact, context)
+
     except Exception as e:
         logger.error(f"Error saving installation request: {e}", exc_info=True)
         context[save_to_var] = {
@@ -371,6 +463,9 @@ def save_support_request(contact, context: dict, params: dict) -> dict:
             'timestamp': timezone.now().isoformat(),
         }
         logger.info(f"Support request saved: {request_id}")
+
+        # Enrich Customer profile with collected data
+        _enrich_customer_profile(contact, context)
 
     except Exception as e:
         logger.error(f"Error saving support request: {e}", exc_info=True)
@@ -1133,18 +1228,8 @@ def save_delivery_info(contact, context: dict, params: dict) -> dict:
         except Exception as exc:
             logger.error(f"save_delivery_info: Error updating order: {exc}", exc_info=True)
 
-    # ── 3. Update Customer record with address + GPS ──────────────
-    try:
-        customer = Customer.objects.filter(phone_number=contact.phone_number).first()
-        if customer:
-            if delivery_address and not customer.address_line1:
-                customer.address_line1 = delivery_address[:255]
-            if gps_lat and gps_lng:
-                customer.gps_latitude = gps_lat
-                customer.gps_longitude = gps_lng
-            customer.save(update_fields=['address_line1', 'gps_latitude', 'gps_longitude'])
-    except Exception as exc:
-        logger.warning(f"save_delivery_info: Could not update customer: {exc}")
+    # ── 3. Enrich Customer profile with delivery details + GPS ────
+    _enrich_customer_profile(contact, context)
 
     # ── 4. Send confirmation message to customer ──────────────────
     delivery_block = (

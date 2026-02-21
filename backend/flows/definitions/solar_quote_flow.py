@@ -60,7 +60,7 @@ SOLAR_QUOTE_FLOW = {
                     "to_step": "fallback_welcome",
                     "priority": 2,
                     "condition_config": {"type": "always_true"}
-v                }
+                }
             ]
         },
         # ── WhatsApp Flow path ─────────────────────────────────────────
@@ -457,7 +457,7 @@ v                }
         {
             "name": "provide_quote",
             "type": "send_message",
-  *-vvcccccccccccccccccc                                                   vonfig": {
+            "config": {
                 "message_type": "text",
                 "text": {
                     "body": "✅ *Quote request submitted!*\n\n"
