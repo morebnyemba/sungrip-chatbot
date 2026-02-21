@@ -1057,6 +1057,19 @@ def send_group_notification(contact, context: dict, params: dict) -> dict:
             )
         notification_ctx.setdefault('timestamp', timezone.now().strftime('%Y-%m-%d %H:%M'))
 
+        # Auto-compute Google Maps link from location_pin if not already set
+        if 'google_maps_link' not in notification_ctx:
+            loc_pin = notification_ctx.get('location_pin')
+            if isinstance(loc_pin, dict):
+                lat = loc_pin.get('latitude')
+                lng = loc_pin.get('longitude')
+                if lat and lng:
+                    notification_ctx['google_maps_link'] = (
+                        f"\U0001f5fa\ufe0f *Map:* https://www.google.com/maps?q={lat},{lng}\n"
+                    )
+            if 'google_maps_link' not in notification_ctx:
+                notification_ctx['google_maps_link'] = ''
+
         queue_notifications_to_users(
             template_name=template_name,
             template_context=notification_ctx,
@@ -1261,15 +1274,23 @@ def save_delivery_info(contact, context: dict, params: dict) -> dict:
     try:
         from notifications.services import queue_notifications_to_users
 
+        # Build Google Maps link from GPS coordinates if available
+        google_maps_link = ''
+        if gps_lat and gps_lng:
+            google_maps_link = (
+                f"🗺️ *Map:* https://www.google.com/maps?q={gps_lat},{gps_lng}\n"
+            )
+
         notification_context = {
             'customer_name': customer_name,
             'customer_phone': contact.phone_number,
             'order_number': order_number,
             'items_summary': items_text,
-            'total_amount': f"${total_amount} {currency}",
+            'order_total': f"${total_amount} {currency}",
             'recipient_name': recipient_name,
             'recipient_phone': recipient_phone,
             'delivery_address': delivery_address,
+            'google_maps_link': google_maps_link,
             'location': location_text or '(not provided)',
             'customer_note': context.get('customer_note', '(none)'),
             'timestamp': timezone.now().strftime('%Y-%m-%d %H:%M'),
