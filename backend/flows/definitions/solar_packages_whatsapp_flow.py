@@ -47,7 +47,7 @@ SOLAR_PACKAGES_WHATSAPP_FLOW = {
                     },
                     {
                         "type": "TextBody",
-                        "text": "Explore our range of solar packages designed for homes and businesses. Select the option that best fits your needs."
+                        "text": "Explore our range of solar packages designed for various power needs. Select the option that best fits your requirements."
                     },
                     {
                         "type": "Footer",
@@ -87,9 +87,9 @@ SOLAR_PACKAGES_WHATSAPP_FLOW = {
                         "label": "Package size",
                         "required": True,
                         "data-source": [
-                            {"id": "small_home", "title": "Small Home (1-2 bedrooms)"},
-                            {"id": "medium_home", "title": "Medium Home (3-4 bedrooms)"},
-                            {"id": "large_home", "title": "Large Home (5+ bedrooms)"},
+                            {"id": "small_home", "title": "Essential / Light Use"},
+                            {"id": "medium_home", "title": "Standard / Medium Use"},
+                            {"id": "large_home", "title": "Premium / Heavy Use"},
                             {"id": "small_business", "title": "Small Business / Commercial"}
                         ]
                     },

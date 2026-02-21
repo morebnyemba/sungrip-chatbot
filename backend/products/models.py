@@ -161,13 +161,13 @@ class SolarPackage(models.Model):
     image_url = models.URLField(blank=True, help_text="External image URL (if no image uploaded)")
     
     # System sizing
-    system_size_kw = models.DecimalField(max_digits=6, decimal_places=2, help_text="System size in kW")
+    system_size_kw = models.DecimalField(max_digits=6, decimal_places=2, help_text="System size in kVA")
     recommended_for = models.CharField(
         max_length=20,
         choices=[
-            ('small_home', 'Small Home (1-2 bedrooms)'),
-            ('medium_home', 'Medium Home (3-4 bedrooms)'),
-            ('large_home', 'Large Home (5+ bedrooms)'),
+            ('small_home', 'Essential / Light Use'),
+            ('medium_home', 'Standard / Medium Use'),
+            ('large_home', 'Premium / Heavy Use'),
             ('small_business', 'Small Business'),
             ('commercial', 'Commercial'),
         ]
@@ -222,7 +222,7 @@ class SolarPackage(models.Model):
         verbose_name_plural = 'Solar Packages'
     
     def __str__(self):
-        return f"{self.name} ({self.system_size_kw}kW)"
+        return f"{self.name} ({self.system_size_kw}kVA)"
 
     @property
     def installment_amount(self):

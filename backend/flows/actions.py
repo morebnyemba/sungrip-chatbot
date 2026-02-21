@@ -585,11 +585,9 @@ def fetch_solar_packages(contact, context: dict, params: dict) -> dict:
         lines = ["☀️ *Sungrip Solar Packages* ☀️\n"]
         for pkg in packages:
             popular_badge = " ⭐ POPULAR" if pkg.is_popular else ""
-            recommended = pkg.get_recommended_for_display()
             lines.append(
                 f"📦 *{pkg.name.upper()}*{popular_badge}\n"
-                f"• {pkg.system_size_kw}kW Solar System\n"
-                f"• Recommended for: {recommended}\n"
+                f"• {pkg.system_size_kw} kVA Solar System\n"
             )
 
             # Add features from JSON field
@@ -681,14 +679,14 @@ def build_packages_interactive_list(contact, context: dict, params: dict) -> dic
                     num_payments = pkg.installment_months - 1
                     installment = remaining / num_payments if num_payments else remaining
                     desc = (
-                        f"{pkg.system_size_kw}kW · ${pkg.deposit_amount:,.0f} dep "
+                        f"{pkg.system_size_kw}kVA · ${pkg.deposit_amount:,.0f} dep "
                         f"+ ${installment:,.0f}×{num_payments}"
                     )
                 else:
                     monthly = pkg.total_price / pkg.installment_months
-                    desc = f"{pkg.system_size_kw}kW · ${pkg.total_price:,.0f} (${monthly:,.0f}/mo)"
+                    desc = f"{pkg.system_size_kw}kVA · ${pkg.total_price:,.0f} (${monthly:,.0f}/mo)"
             else:
-                desc = f"{pkg.system_size_kw}kW · ${pkg.total_price:,.0f}"
+                desc = f"{pkg.system_size_kw}kVA · ${pkg.total_price:,.0f}"
 
             row = {
                 "id": row_id,
@@ -821,8 +819,7 @@ def fetch_package_details(contact, context: dict, params: dict) -> dict:
             lines.append("⭐ MOST POPULAR")
 
         lines.append("")
-        lines.append(f"⚡ *System Size:* {pkg.system_size_kw} kW")
-        lines.append(f"🏠 *Recommended for:* {pkg.get_recommended_for_display()}")
+        lines.append(f"⚡ *System Size:* {pkg.system_size_kw} kVA")
 
         # ── Pricing & payment info ──
         lines.append(f"💰 *Total Price:* ${pkg.total_price:,.0f} USD")
@@ -889,11 +886,11 @@ def fetch_package_details(contact, context: dict, params: dict) -> dict:
         context['package_detail_text'] = "\n".join(lines)
         context['package_found'] = True
         context['package_price'] = f"${pkg.total_price:,.0f} USD"
-        context['package_system_size'] = f"{pkg.system_size_kw} kW"
+        context['package_system_size'] = f"{pkg.system_size_kw} kVA"
 
         # Map system_size_kw → raw interactive ID used by LABEL_MAPS
-        kw_to_id = {3.5: '3.5kva', 4.2: '4.2kva', 6.2: '6.2kva'}
-        context['system_size'] = kw_to_id.get(
+        kva_to_id = {3.5: '3.5kva', 4.2: '4.2kva', 6.2: '6.2kva'}
+        context['system_size'] = kva_to_id.get(
             float(pkg.system_size_kw), f"{pkg.system_size_kw}kva"
         )
 

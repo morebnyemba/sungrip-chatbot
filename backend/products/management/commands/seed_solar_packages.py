@@ -26,7 +26,7 @@ PACKAGES = [
     {
         "name": "3.5kVA Solar System",
         "description": (
-            "Entry-level home solar system ideal for small households. "
+            "Entry-level solar system ideal for essential power needs. "
             "Supply and fix — professional installation included. "
             "Outside Harare, transport charges apply. "
             "Warranty and after-service support included."
@@ -64,7 +64,7 @@ PACKAGES = [
     {
         "name": "4.2kVA Solar System",
         "description": (
-            "Mid-range home solar system with camera support. "
+            "Mid-range solar system with additional capacity. "
             "Supply and fix — professional installation included. "
             "Outside Harare, transport charges apply. "
             "Warranty and after-service support included."
@@ -103,7 +103,7 @@ PACKAGES = [
     {
         "name": "6.2kVA Solar System",
         "description": (
-            "Heavy-duty home solar system for large households. "
+            "Heavy-duty solar system for high power consumption. "
             "Powers all lights, plugs, entertainment, and multiple fridges. "
             "Supply and fix — professional installation included. "
             "Outside Harare, transport charges apply. "
@@ -140,7 +140,7 @@ PACKAGES = [
     {
         "name": "3.5kVA Solar System",
         "description": (
-            "Entry-level home solar system with affordable 3-month payment "
+            "Entry-level solar system with affordable 3-month payment "
             "plan. Supply and fix — professional installation included. "
             "Outside Harare, transport charges apply. "
             "Warranty and after-service support included."
@@ -179,7 +179,7 @@ PACKAGES = [
     {
         "name": "4.2kVA Solar System",
         "description": (
-            "Mid-range home solar system with camera support and affordable "
+            "Mid-range solar system with additional capacity and affordable "
             "3-month payment plan. Supply and fix — professional installation "
             "included. Outside Harare, transport charges apply. "
             "Warranty and after-service support included."
@@ -219,7 +219,7 @@ PACKAGES = [
     {
         "name": "6.2kVA Solar System",
         "description": (
-            "Heavy-duty home solar system for large households with affordable "
+            "Heavy-duty solar system for high power consumption with affordable "
             "3-month payment plan. Powers all lights, plugs, entertainment, "
             "and multiple fridges. Supply and fix — professional installation "
             "included. Outside Harare, transport charges apply."
@@ -256,7 +256,7 @@ PACKAGES = [
     {
         "name": "3.5kVA Solar System",
         "description": (
-            "Entry-level home solar system with flexible 6-month payment plan. "
+            "Entry-level solar system with flexible 6-month payment plan. "
             "Supply and fix — professional installation included. "
             "Outside Harare, transport charges apply. "
             "Warranty and after-service support included. "
@@ -296,7 +296,7 @@ PACKAGES = [
     {
         "name": "4.2kVA Solar System",
         "description": (
-            "Mid-range home solar system with camera support and flexible "
+            "Mid-range solar system with additional capacity and flexible "
             "6-month payment plan. Supply and fix — professional installation "
             "included. Outside Harare, transport charges apply. "
             "Warranty and after-service support included."
@@ -336,7 +336,7 @@ PACKAGES = [
     {
         "name": "6.2kVA Solar System",
         "description": (
-            "Heavy-duty home solar system for large households with flexible "
+            "Heavy-duty solar system for high power consumption with flexible "
             "6-month payment plan. Powers all lights, plugs, entertainment, "
             "and multiple fridges. Supply and fix — professional installation "
             "included. Outside Harare, transport charges apply."
