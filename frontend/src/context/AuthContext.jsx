@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useCallback, useRef } from 'react';
 import { useAtom } from 'jotai';
 import { toast } from 'sonner';
 import { jwtDecode } from 'jwt-decode';
@@ -26,47 +26,53 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useAtom(userAtom);
   const [accessToken, setAccessToken] = useAtom(accessTokenAtom);
-  const [, setRefreshToken] = useAtom(refreshTokenAtom);
+  const [refreshToken, setRefreshToken] = useAtom(refreshTokenAtom);
   const [isAuthenticated] = useAtom(isAuthenticatedAtom);
   const [isLoading, setIsLoading] = useAtom(isLoadingAuthAtom);
 
+  // Capture the initial token values synchronously populated by atomWithStorage.
+  // These refs let the one-time mount effect read the localStorage-initialised values
+  // without adding them as reactive dependencies.
+  const initialAccessToken = useRef(accessToken);
+  const initialRefreshToken = useRef(refreshToken);
+
   useEffect(() => {
-    const token = authService.getAccessToken();
-    const refreshToken = authService.getRefreshToken();
-    if (token && refreshToken && token !== 'undefined' && refreshToken !== 'undefined') {
+    // Validate the tokens that were restored from localStorage on initial render.
+    const token = initialAccessToken.current;
+    const rToken = initialRefreshToken.current;
+    if (token && rToken) {
       if (typeof token === 'string' && token.split('.').length === 3) {
         try {
           const decodedUser = jwtDecode(token);
           if (decodedUser.exp * 1000 > Date.now()) {
-            setAccessToken(token);
-            setRefreshToken(refreshToken);
             setUser(decodedUser);
             apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
           } else {
-            authService.logout(false);
+            authService.clearTokens();
             setAccessToken(null);
             setRefreshToken(null);
             setUser(null);
           }
         } catch (e) {
-          authService.logout(false);
+          authService.clearTokens();
           setAccessToken(null);
           setRefreshToken(null);
           setUser(null);
         }
       } else {
-        authService.logout(false);
+        authService.clearTokens();
         setAccessToken(null);
         setRefreshToken(null);
         setUser(null);
       }
     } else {
+      authService.clearTokens();
       setAccessToken(null);
       setRefreshToken(null);
       setUser(null);
     }
     setIsLoading(false);
-  }, [setAccessToken, setRefreshToken, setUser, setIsLoading]);
+  }, []); // intentionally run once on mount using ref-captured initial values
 
   const login = async (username, password) => {
     const result = await authService.login(username, password);

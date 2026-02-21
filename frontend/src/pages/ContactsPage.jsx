@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 import { useForm, Controller } from 'react-hook-form';
 import {
   FiUser, FiUsers, FiMessageSquare, FiSearch, FiLoader, FiAlertCircle, FiEdit,
-  FiPhone, FiCalendar, FiSmartphone, FiInfo
+  FiPhone, FiCalendar, FiSmartphone, FiInfo, FiArrowLeft
 } from 'react-icons/fi';
 import { formatDistanceToNow, parseISO, format, isValid as isValidDate } from 'date-fns';
 import { contactsApi } from '@/lib/api';
@@ -56,6 +56,7 @@ export default function ContactsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [pagination, setPagination] = useState({ count: 0, next: null, previous: null, currentPage: 1 });
+  const [isMobileDetailVisible, setIsMobileDetailVisible] = useState(false);
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -88,6 +89,7 @@ export default function ContactsPage() {
   }, [fetchContacts, searchTerm]);
 
   const handleSelectContact = useCallback(async (contact) => {
+    setIsMobileDetailVisible(true);
     setIsLoadingDetails(true);
     setSelectedContactDetails(null);
     try {
@@ -134,7 +136,7 @@ export default function ContactsPage() {
   return (
     <div className="flex flex-1 min-h-0 border dark:border-slate-700 rounded-lg shadow-md overflow-hidden">
       {/* Contacts List Panel */}
-      <div className="w-full sm:w-2/5 md:w-1/3 min-w-[300px] max-w-[450px] border-r dark:border-slate-700 flex flex-col bg-slate-50 dark:bg-slate-800/50">
+      <div className={`${isMobileDetailVisible ? 'hidden md:flex' : 'flex'} w-full md:w-2/5 lg:w-1/3 min-w-0 md:min-w-[300px] md:max-w-[450px] border-r dark:border-slate-700 flex-col bg-slate-50 dark:bg-slate-800/50`}>
         <div className="p-3 border-b dark:border-slate-700">
           <div className="relative">
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -183,9 +185,15 @@ export default function ContactsPage() {
       </div>
 
       {/* Contact Details Panel */}
-      <ScrollArea className="flex-1 bg-white dark:bg-slate-900">
-        {isLoadingDetails && <div className="flex items-center justify-center h-full p-10"><FiLoader className="animate-spin h-10 w-10 text-green-500" /></div>}
-        {!isLoadingDetails && selectedContactDetails ? (
+      <div className={`${isMobileDetailVisible ? 'flex' : 'hidden md:flex'} flex-1 flex-col bg-white dark:bg-slate-900 overflow-hidden`}>
+        <div className="md:hidden flex items-center px-3 py-2 border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+          <Button variant="ghost" size="sm" onClick={() => setIsMobileDetailVisible(false)} className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
+            <FiArrowLeft className="h-4 w-4" /> Back
+          </Button>
+        </div>
+        <ScrollArea className="flex-1">
+          {isLoadingDetails && <div className="flex items-center justify-center h-full p-10"><FiLoader className="animate-spin h-10 w-10 text-green-500" /></div>}
+          {!isLoadingDetails && selectedContactDetails ? (
           <div className="p-4 sm:p-6 space-y-6">
             <Card className="dark:bg-slate-800 dark:border-slate-700">
               <CardHeader className="flex flex-col sm:flex-row justify-between sm:items-start gap-2 pb-4">
@@ -270,7 +278,8 @@ export default function ContactsPage() {
             <p className="text-sm">Or use the search to find a specific contact.</p>
           </div>
         )}
-      </ScrollArea>
+        </ScrollArea>
+      </div>
     </div>
   );
 }

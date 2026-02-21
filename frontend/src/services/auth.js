@@ -16,8 +16,16 @@ export const authService = {
     localStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem('user');
   },
-  getAccessToken: () => localStorage.getItem(ACCESS_TOKEN_KEY),
-  getRefreshToken: () => localStorage.getItem(REFRESH_TOKEN_KEY),
+  getAccessToken: () => {
+    const val = localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (!val || val === 'null' || val === 'undefined') return null;
+    try { return JSON.parse(val); } catch { return val; }
+  },
+  getRefreshToken: () => {
+    const val = localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (!val || val === 'null' || val === 'undefined') return null;
+    try { return JSON.parse(val); } catch { return val; }
+  },
 
   async login(username, password) {
     try {
