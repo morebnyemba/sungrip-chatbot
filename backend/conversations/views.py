@@ -81,6 +81,9 @@ class ContactViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='send-message')
     def send_message(self, request, pk=None):
         """Send a text message to a contact via the WhatsApp API (REST fallback)."""
+        from django.utils import timezone
+        from .models import Conversation
+
         contact = self.get_object()
         text = request.data.get('message', '').strip()
         if not text:
@@ -99,17 +102,35 @@ class ContactViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
+        now = timezone.now()
+
+        # Get or create a conversation for this contact
+        conversation, _ = Conversation.objects.get_or_create(
+            contact=contact,
+            status='active',
+            defaults={'last_message_at': now},
+        )
+
+        wamid = result.get('messages', [{}])[0].get('id', '') or None
+
         # Persist the outgoing message locally
         msg = Message.objects.create(
+            conversation=conversation,
             contact=contact,
-            direction='out',
+            direction='outbound',
             message_type='text',
-            text_content=text,
+            content=text,
             status='sent',
-            whatsapp_message_id=result.get('messages', [{}])[0].get('id', ''),
+            message_id=wamid,
+            timestamp=now,
         )
-        from django.utils import timezone
-        contact.last_message_date = timezone.now()
+
+        # Update conversation timestamp
+        conversation.last_message_at = now
+        conversation.save(update_fields=['last_message_at'])
+
+        # Update contact summary fields
+        contact.last_message_date = now
         contact.last_message_preview = text[:255]
         contact.save(update_fields=['last_message_date', 'last_message_preview'])
 
