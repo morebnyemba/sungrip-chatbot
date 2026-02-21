@@ -192,7 +192,7 @@ export default function ConversationsPage() {
   }[readyState];
 
   return (
-    <div className="flex flex-1 h-[calc(100vh-12rem)] overflow-hidden rounded-xl border bg-background shadow-sm">
+    <div className="flex flex-1 min-h-0 overflow-hidden rounded-xl border bg-background shadow-sm">
       {/* Contacts Panel */}
       <div className={`${selectedContact ? 'hidden md:flex md:w-96' : 'flex w-full'} border-r flex-col bg-background transition-all duration-300 h-full`}>
         <div className="p-3 border-b sticky top-0 bg-background z-10">
