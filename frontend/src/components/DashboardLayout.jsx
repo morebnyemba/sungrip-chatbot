@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Skeleton } from './ui/skeleton';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip';
 import { useMediaQuery } from 'react-responsive';
 import { useAuth } from '@/context/AuthContext';
+import { toast } from 'sonner';
 import {
   FiSearch, FiSettings, FiMessageSquare, FiMenu, FiHome, FiX,
   FiChevronLeft, FiChevronRight, FiUsers, FiImage, FiUser, FiBell,
@@ -32,6 +33,20 @@ export default function DashboardLayout() {
   const location = useLocation();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [headerSearch, setHeaderSearch] = useState('');
+
+  const handleHeaderSearch = useCallback((e) => {
+    if (e.key === 'Enter' && headerSearch.trim()) {
+      const q = headerSearch.trim().toLowerCase();
+      const route = navigationLinks.find(l => l.label.toLowerCase().includes(q));
+      if (route) {
+        navigate(route.to);
+      } else {
+        navigate(`/contacts?search=${encodeURIComponent(q)}`);
+      }
+      setHeaderSearch('');
+    }
+  }, [headerSearch, navigate]);
 
   const navigationLinks = [
     { to: '/dashboard', label: 'Dashboard', icon: <FiHome className="h-5 w-5" /> },
@@ -95,7 +110,7 @@ export default function DashboardLayout() {
           <Link to="/dashboard" className="font-semibold text-lg">Sungrip CRM</Link>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="rounded-full relative">
+          <Button variant="ghost" size="icon" className="rounded-full relative" onClick={() => toast.info('Notifications coming soon.')}>
             <FiBell className="h-5 w-5" />
           </Button>
           <Button variant="ghost" size="icon" className="rounded-full">
@@ -207,11 +222,11 @@ export default function DashboardLayout() {
             <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-100">{pageTitle}</h1>
             <div className="relative max-w-md w-full">
               <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input type="text" placeholder="Search..." className="w-full pl-9 pr-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" />
+              <input type="text" placeholder="Search pages or contacts..." value={headerSearch} onChange={(e) => setHeaderSearch(e.target.value)} onKeyDown={handleHeaderSearch} className="w-full pl-9 pr-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" />
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" className="rounded-full relative">
+            <Button variant="ghost" size="icon" className="rounded-full relative" onClick={() => toast.info('Notifications coming soon.')}>
               <FiBell className="h-5 w-5" />
               <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-white dark:border-slate-800"></span>
             </Button>

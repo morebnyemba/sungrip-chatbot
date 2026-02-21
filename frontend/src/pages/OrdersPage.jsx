@@ -25,7 +25,7 @@ const STATUS_COLORS = {
 };
 
 const STATUS_OPTIONS = [
-  { value: '', label: 'All Statuses' },
+  { value: 'all', label: 'All Statuses' },
   { value: 'pending', label: 'Pending Review' },
   { value: 'confirmed', label: 'Confirmed' },
   { value: 'processing', label: 'Processing' },
@@ -97,7 +97,7 @@ function OrderDetailDialog({ order, open, onClose, onUpdated }) {
             <Select value={status} onValueChange={setStatus}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {STATUS_OPTIONS.filter(o => o.value).map(o => (
+                {STATUS_OPTIONS.filter(o => o.value !== 'all').map(o => (
                   <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                 ))}
               </SelectContent>
@@ -147,7 +147,7 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [debouncedSearch] = useDebounce(search, 300);
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [viewDialog, setViewDialog] = useState(false);
@@ -157,7 +157,7 @@ export default function OrdersPage() {
     try {
       const params = {};
       if (debouncedSearch) params.search = debouncedSearch;
-      if (statusFilter) params.status = statusFilter;
+      if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
       const res = await productOrdersApi.list(params);
       setOrders(res.data.results || res.data || []);
     } catch {
@@ -202,7 +202,7 @@ export default function OrdersPage() {
               </SelectTrigger>
               <SelectContent>
                 {STATUS_OPTIONS.map(o => (
-                  <SelectItem key={o.value || 'all'} value={o.value}>{o.label}</SelectItem>
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

@@ -68,7 +68,7 @@ export default function ContactsPage() {
     setIsLoadingContacts(true);
     try {
       const filterParam = searchParams.get('filter');
-      const queryParams = { page: page.toString() };
+      const queryParams = { page: page.toString(), page_size: PAGE_SIZE.toString() };
       if (currentSearchTerm) queryParams.search = currentSearchTerm;
       if (filterParam === 'needs_intervention') queryParams.needs_human_intervention = 'true';
 

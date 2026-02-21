@@ -160,14 +160,21 @@ export default function ConversationsPage() {
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedContact) return;
     if (readyState === ReadyState.OPEN) {
       sendJsonMessage({ type: 'send_message', message: newMessage.trim() });
       setNewMessage('');
     } else {
-      toast.error("Cannot send message. Connection is not live.");
+      // REST API fallback when WebSocket is not connected
+      try {
+        const res = await contactsApi.sendMessage(selectedContact.id, newMessage.trim());
+        setMessages(prev => [...prev, res.data]);
+        setNewMessage('');
+      } catch {
+        toast.error("Cannot send message. Connection is not live.");
+      }
     }
   };
 
@@ -283,9 +290,9 @@ export default function ConversationsPage() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><FiMoreVertical className="h-5 w-5" /></Button></DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem>View profile</DropdownMenuItem>
-                  <DropdownMenuItem>Mark as unread</DropdownMenuItem>
-                  <DropdownMenuItem className="text-destructive">Delete chat</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => toast.info('Contact profile is shown on the Contacts page.', { action: { label: 'Open', onClick: () => window.location.href = `/contacts?id=${selectedContact.id}` } })}>View profile</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => toast.info('Mark as unread coming soon.')}>Mark as unread</DropdownMenuItem>
+                  <DropdownMenuItem className="text-destructive" onClick={() => toast.warning('Chat deletion is not yet supported.')}>Delete chat</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -322,9 +329,9 @@ export default function ConversationsPage() {
 
           <div className="p-3 border-t bg-background sticky bottom-0">
             <form onSubmit={handleSendMessage} className="flex items-end gap-2">
-              <Button type="button" variant="ghost" size="icon" className="text-muted-foreground"><FiPaperclip className="h-5 w-5" /></Button>
-              <Textarea ref={inputRef} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} onKeyDown={handleKeyDown} disabled={readyState !== ReadyState.OPEN} placeholder="Type a message..." rows={1} className="flex-1 py-3 min-h-[44px] max-h-[120px] overflow-y-auto resize-none" />
-              <Button type="submit" size="sm" disabled={!newMessage.trim() || readyState !== ReadyState.OPEN} className="h-[44px]"><FiSend className="h-4 w-4" /></Button>
+              <Button type="button" variant="ghost" size="icon" className="text-muted-foreground" onClick={() => toast.info('File attachments coming soon.')}><FiPaperclip className="h-5 w-5" /></Button>
+              <Textarea ref={inputRef} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} onKeyDown={handleKeyDown} placeholder="Type a message..." rows={1} className="flex-1 py-3 min-h-[44px] max-h-[120px] overflow-y-auto resize-none" />
+              <Button type="submit" size="sm" disabled={!newMessage.trim()} className="h-[44px]"><FiSend className="h-4 w-4" /></Button>
             </form>
           </div>
         </div>

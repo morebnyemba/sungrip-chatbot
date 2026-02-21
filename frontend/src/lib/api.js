@@ -3,6 +3,10 @@ import axios from 'axios';
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.zimgrow.shop';
 const AUTH_ERROR_EVENT = 'auth-error';
 
+// Token keys — must match the keys used in services/auth.js and atoms/authAtoms.js
+const ACCESS_TOKEN_KEY = 'accessToken';
+const REFRESH_TOKEN_KEY = 'refreshToken';
+
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -11,7 +15,7 @@ const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
+  const token = localStorage.getItem(ACCESS_TOKEN_KEY);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -25,7 +29,7 @@ apiClient.interceptors.response.use(
   async (error) => {
     if (error.response?.status === 401 && !error.config._retry) {
       error.config._retry = true;
-      const refreshToken = localStorage.getItem('refreshToken');
+      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
       if (refreshToken) {
         try {
           if (!refreshPromise) {
@@ -34,12 +38,12 @@ apiClient.interceptors.response.use(
             }).finally(() => { refreshPromise = null; });
           }
           const { data } = await refreshPromise;
-          localStorage.setItem('accessToken', data.access);
+          localStorage.setItem(ACCESS_TOKEN_KEY, data.access);
           error.config.headers.Authorization = `Bearer ${data.access}`;
           return apiClient(error.config);
         } catch (refreshError) {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
+          localStorage.removeItem(ACCESS_TOKEN_KEY);
+          localStorage.removeItem(REFRESH_TOKEN_KEY);
           localStorage.removeItem('user');
           window.dispatchEvent(new Event(AUTH_ERROR_EVENT));
           return Promise.reject(refreshError);
@@ -51,6 +55,13 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// ─── Dashboard Stats ──────────────────────────────────────────────────────────
+export const dashboardStatsApi = {
+  get() {
+    return apiClient.get('/api/conversations/dashboard-stats/');
+  },
+};
 
 // ─── Contacts / Conversations ────────────────────────────────────────────────
 export const contactsApi = {
@@ -74,6 +85,9 @@ export const contactsApi = {
   },
   listMessages(contactId) {
     return apiClient.get(`/api/conversations/contacts/${contactId}/messages/`);
+  },
+  sendMessage(contactId, text) {
+    return apiClient.post(`/api/conversations/contacts/${contactId}/send-message/`, { message: text });
   },
 };
 
@@ -220,6 +234,48 @@ export const quoteRequestsApi = {
   },
   delete(id) {
     return apiClient.delete(`/api/quote-requests/${id}/`);
+  },
+};
+
+// ─── Meta App Configs (API Settings) ─────────────────────────────────────────
+export const metaConfigsApi = {
+  list(params = {}) {
+    return apiClient.get('/meta/api/configs/', { params });
+  },
+  get(id) {
+    return apiClient.get(`/meta/api/configs/${id}/`);
+  },
+  create(data) {
+    return apiClient.post('/meta/api/configs/', data);
+  },
+  update(id, data) {
+    return apiClient.patch(`/meta/api/configs/${id}/`, data);
+  },
+  delete(id) {
+    return apiClient.delete(`/meta/api/configs/${id}/`);
+  },
+};
+
+// ─── Webhook Event Logs ──────────────────────────────────────────────────────
+export const webhookLogsApi = {
+  list(params = {}) {
+    return apiClient.get('/meta/api/webhook-logs/', { params });
+  },
+  get(id) {
+    return apiClient.get(`/meta/api/webhook-logs/${id}/`);
+  },
+};
+
+// ─── Installations (Site Assessments) ────────────────────────────────────────
+export const installationsApi = {
+  list(params = {}) {
+    return apiClient.get('/api/installations/', { params });
+  },
+  get(id) {
+    return apiClient.get(`/api/installations/${id}/`);
+  },
+  update(id, data) {
+    return apiClient.patch(`/api/installations/${id}/`, data);
   },
 };
 

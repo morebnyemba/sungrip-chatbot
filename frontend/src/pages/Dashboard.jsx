@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { FiUsers, FiMessageCircle, FiBarChart2, FiActivity, FiCreditCard, FiSettings } from 'react-icons/fi';
+import { FiUsers, FiMessageCircle, FiBarChart2, FiActivity, FiCreditCard, FiSettings, FiLoader } from 'react-icons/fi';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/context/AuthContext';
+import { dashboardStatsApi } from '@/lib/api';
 
-const StatCard = ({ title, value, icon, linkTo, colorScheme }) => {
+const StatCard = ({ title, value, icon, linkTo, colorScheme, loading }) => {
   const colors = {
     green: { bg: 'bg-green-50 dark:bg-green-900/40', border: 'border-green-500/60', text: 'text-green-700 dark:text-green-300', iconColor: 'text-green-600 dark:text-green-400' },
     emerald: { bg: 'bg-emerald-50 dark:bg-emerald-900/40', border: 'border-emerald-500/60', text: 'text-emerald-700 dark:text-emerald-300', iconColor: 'text-emerald-600 dark:text-emerald-400' },
@@ -18,7 +19,11 @@ const StatCard = ({ title, value, icon, linkTo, colorScheme }) => {
         <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300">{title}</h3>
         {React.cloneElement(icon, { className: `h-6 w-6 opacity-70 ${c.iconColor}` })}
       </div>
-      <p className={`text-3xl font-bold ${c.text}`}>{value}</p>
+      {loading ? (
+        <FiLoader className={`animate-spin h-7 w-7 ${c.text}`} />
+      ) : (
+        <p className={`text-3xl font-bold ${c.text}`}>{value}</p>
+      )}
     </div>
   );
   return linkTo ? <Link to={linkTo} className="block h-full">{content}</Link> : <div className="block h-full">{content}</div>;
@@ -26,6 +31,17 @@ const StatCard = ({ title, value, icon, linkTo, colorScheme }) => {
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const [stats, setStats] = useState({ active_conversations: 0, total_contacts: 0, pending_orders: 0, installation_requests: 0 });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    dashboardStatsApi.get()
+      .then(res => { if (!cancelled) setStats(res.data); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="space-y-8 pb-12">
@@ -37,10 +53,10 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        <StatCard title="Active Conversations" value="—" icon={<FiMessageCircle />} linkTo="/conversation" colorScheme="green" />
-        <StatCard title="Total Contacts" value="—" icon={<FiUsers />} linkTo="/contacts" colorScheme="emerald" />
-        <StatCard title="Pending Orders" value="—" icon={<FiCreditCard />} linkTo="/orders" colorScheme="teal" />
-        <StatCard title="Installation Requests" value="—" icon={<FiActivity />} linkTo="/installation-requests" colorScheme="red" />
+        <StatCard title="Active Conversations" value={stats.active_conversations} icon={<FiMessageCircle />} linkTo="/conversation" colorScheme="green" loading={loading} />
+        <StatCard title="Total Contacts" value={stats.total_contacts} icon={<FiUsers />} linkTo="/contacts" colorScheme="emerald" loading={loading} />
+        <StatCard title="Pending Orders" value={stats.pending_orders} icon={<FiCreditCard />} linkTo="/orders" colorScheme="teal" loading={loading} />
+        <StatCard title="Installation Requests" value={stats.installation_requests} icon={<FiActivity />} linkTo="/installation-requests" colorScheme="red" loading={loading} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
