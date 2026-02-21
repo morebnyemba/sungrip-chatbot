@@ -61,13 +61,13 @@ export const contactsApi = {
     return apiClient.get(`/api/conversations/contacts/${id}/`);
   },
   retrieve(id) {
-    return apiClient.get(`/api/conversations/contacts/${id}/`);
+    return this.get(id);
   },
   update(id, data) {
     return apiClient.patch(`/api/conversations/contacts/${id}/`, data);
   },
   patch(id, data) {
-    return apiClient.patch(`/api/conversations/contacts/${id}/`, data);
+    return this.update(id, data);
   },
   toggleIntervention(id) {
     return apiClient.post(`/api/conversations/contacts/${id}/toggle-intervention/`);

@@ -21,6 +21,8 @@ import {
 import { formatDistanceToNow, parseISO, format, isValid as isValidDate } from 'date-fns';
 import { contactsApi } from '@/lib/api';
 
+const PAGE_SIZE = 20;
+
 const ProfileFieldDisplay = ({ label, value, icon, children, isDate = false }) => {
   let displayValue = value;
   if (isDate && value) {
@@ -124,7 +126,7 @@ export default function ContactsPage() {
   };
 
   const handlePageChange = (newPage) => {
-    if (newPage >= 1 && newPage <= Math.ceil(pagination.count / 20)) {
+    if (newPage >= 1 && newPage <= Math.ceil(pagination.count / PAGE_SIZE)) {
       fetchContacts(newPage, searchTerm);
     }
   };
@@ -174,7 +176,7 @@ export default function ContactsPage() {
         {pagination.count > 0 && (
           <div className="p-2 border-t dark:border-slate-700 flex justify-between items-center text-xs">
             <Button variant="outline" size="sm" onClick={() => handlePageChange(pagination.currentPage - 1)} disabled={!pagination.previous || isLoadingContacts}>Prev</Button>
-            <span>Page {pagination.currentPage} of {Math.max(1, Math.ceil(pagination.count / 20))}</span>
+            <span>Page {pagination.currentPage} of {Math.max(1, Math.ceil(pagination.count / PAGE_SIZE))}</span>
             <Button variant="outline" size="sm" onClick={() => handlePageChange(pagination.currentPage + 1)} disabled={!pagination.next || isLoadingContacts}>Next</Button>
           </div>
         )}
