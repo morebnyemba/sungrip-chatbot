@@ -1577,7 +1577,7 @@ def process_whatsapp_flow_response(msg_data: dict, contact: 'Contact', app_confi
 def process_order_from_catalog(
     msg_data: dict,
     contact: 'Contact',
-) -> Tuple[bool, str]:
+) -> Tuple[bool, str, dict]:
     """
     Process an incoming ``order`` message from the WhatsApp Commerce Catalog.
 
@@ -1591,7 +1591,7 @@ def process_order_from_catalog(
                     {
                         "product_retailer_id": "SKU-001",
                         "quantity": "2",
-                        "item_price": "15000",
+                        "item_price": "80",
                         "currency": "USD"
                     }
                 ],
@@ -1603,10 +1603,13 @@ def process_order_from_catalog(
     1. Gets or creates a Customer record for the contact.
     2. Looks up each product by SKU (``product_retailer_id``).
     3. Creates an Order + OrderItems.
-    4. Sends a confirmation message back to the customer.
-    5. Sends a team notification about the new order.
 
-    Returns (success: bool, notes: str).
+    Confirmation messages and team notifications are sent *after*
+    the ``order_delivery_info`` flow collects delivery details.
+
+    Returns (success: bool, notes: str, order_context: dict).
+    The ``order_context`` dict contains order_number, items_text,
+    total_amount, and currency for the delivery-info flow.
     """
     import random
     from decimal import Decimal, InvalidOperation
@@ -1626,7 +1629,7 @@ def process_order_from_catalog(
             f"process_order_from_catalog: No product_items in order "
             f"from {contact.phone_number}"
         )
-        return False, 'No product items in order'
+        return False, 'No product items in order', {}
 
     try:
         # 1. Get or create Customer
@@ -1662,10 +1665,12 @@ def process_order_from_catalog(
             except (ValueError, TypeError):
                 qty = 1
 
-            # Meta sends price in cents (minor currency units)
+            # Meta order webhook sends item_price in major currency
+            # units (e.g. dollars), NOT cents.  The catalog upload
+            # multiplies by 100 for the product API, but the order
+            # payload already has the dollar amount.
             try:
-                raw_price = Decimal(str(item.get('item_price', '0')))
-                unit_price = raw_price / Decimal('100')
+                unit_price = Decimal(str(item.get('item_price', '0')))
             except (InvalidOperation, TypeError):
                 unit_price = Decimal('0')
 
@@ -1723,51 +1728,21 @@ def process_order_from_catalog(
             f"total ${total_amount:.2f} {currency}"
         )
 
-        # 7. Send confirmation message to customer
-        items_text = '\n'.join(item_lines)
-        confirmation = (
-            f"🎉 *Thank you for your order!*\n\n"
-            f"📦 *Order Number:* {order_number}\n"
-            f"📋 *Items:*\n{items_text}\n\n"
-            f"💰 *Total:* ${total_amount:.2f} {currency}\n\n"
-            f"Our team will contact you shortly to confirm "
-            f"payment and delivery details."
-        )
+        # Build context for the delivery-info flow.  Confirmation
+        # messages and team notifications are sent by the
+        # ``save_delivery_info`` action once the user supplies
+        # recipient / address details.
+        order_context = {
+            'order_id': order.id,
+            'order_number': order_number,
+            'items_text': '\n'.join(item_lines),
+            'total_amount': f"{total_amount:.2f}",
+            'currency': currency,
+            'customer_name': customer.full_name,
+            'customer_note': customer_note or '',
+        }
 
-        try:
-            send_whatsapp_message(
-                to_phone_number=contact.phone_number,
-                message_type='text',
-                data={'body': confirmation},
-            )
-        except Exception as exc:
-            logger.error(
-                f"Failed to send order confirmation to "
-                f"{contact.phone_number}: {exc}"
-            )
-
-        # 8. Notify team via notification system
-        try:
-            from notifications.tasks import send_notification_task
-
-            notification_context = {
-                'customer_name': customer.full_name,
-                'customer_phone': contact.phone_number,
-                'order_number': order_number,
-                'items_summary': items_text,
-                'total_amount': f"${total_amount:.2f} {currency}",
-                'customer_note': customer_note or '(none)',
-            }
-            send_notification_task.delay(
-                template_name='new_catalog_order',
-                context=notification_context,
-                group='sales_team',
-            )
-        except Exception as exc:
-            # Notification failure should not block order creation
-            logger.warning(f"Team notification failed for order {order_number}: {exc}")
-
-        return True, f'Order {order_number} created with {len(line_items)} items'
+        return True, f'Order {order_number} created with {len(line_items)} items', order_context
 
     except Exception as exc:
         logger.error(
@@ -1787,4 +1762,4 @@ def process_order_from_catalog(
             )
         except Exception:
             pass
-        return False, f'Error: {str(exc)[:200]}'
+        return False, f'Error: {str(exc)[:200]}', {}

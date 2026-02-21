@@ -903,3 +903,151 @@ def send_catalog_message(contact, context: dict, params: dict) -> dict:
         f"{contact.phone_number} (catalog_id={catalog_id})"
     )
     return context
+
+
+# ---------------------------------------------------------------------------
+#  Save delivery info after catalog order  (order_delivery_info flow)
+# ---------------------------------------------------------------------------
+
+@register_flow_action('save_delivery_info')
+def save_delivery_info(contact, context: dict, params: dict) -> dict:
+    """
+    Persist delivery details collected by the ``order_delivery_info`` flow,
+    send the order confirmation to the customer, and notify the team.
+
+    Expected context variables (set by the flow's question steps):
+        order_id          – PK of the Order created by process_order_from_catalog
+        order_number      – Human-readable order number (e.g. WA-12345)
+        items_text        – Formatted line items string
+        total_amount      – Total formatted as e.g. "80.00"
+        currency          – e.g. "USD"
+        recipient_name    – Full name of the delivery recipient
+        recipient_phone   – Phone number for the recipient
+        delivery_address  – Street / area / city
+        location_pin      – Location dict from WhatsApp, "skip_location", or text
+        customer_name     – Name of the ordering customer (for notification)
+    """
+    from orders.models import Order
+    from customers.models import Customer
+    from meta_integration.utils import send_whatsapp_message
+
+    order_id = context.get('order_id')
+    order_number = context.get('order_number', 'N/A')
+    items_text = context.get('items_text', '')
+    total_amount = context.get('total_amount', '0.00')
+    currency = context.get('currency', 'USD')
+    recipient_name = context.get('recipient_name', '')
+    recipient_phone = context.get('recipient_phone', '')
+    delivery_address = context.get('delivery_address', '')
+    location_pin = context.get('location_pin')
+    customer_name = context.get('customer_name', '')
+
+    # ── 1. Determine location text ────────────────────────────────
+    location_text = ''
+    gps_lat = None
+    gps_lng = None
+    if isinstance(location_pin, dict):
+        # WhatsApp location object: {'latitude': ..., 'longitude': ..., ...}
+        gps_lat = location_pin.get('latitude')
+        gps_lng = location_pin.get('longitude')
+        loc_name = location_pin.get('name', '')
+        loc_addr = location_pin.get('address', '')
+        if gps_lat and gps_lng:
+            location_text = f"📍 {loc_name or loc_addr or f'{gps_lat}, {gps_lng}'}"
+    elif location_pin and str(location_pin) != 'skip_location':
+        location_text = f"📍 {location_pin}"
+
+    # ── 2. Update Order with delivery details ─────────────────────
+    if order_id:
+        try:
+            order = Order.objects.get(pk=order_id)
+            delivery_notes = (
+                f"Recipient: {recipient_name}\n"
+                f"Phone: {recipient_phone}\n"
+                f"Address: {delivery_address}"
+            )
+            if location_text:
+                delivery_notes += f"\n{location_text}"
+
+            # Append delivery info to customer_notes
+            existing_notes = order.customer_notes or ''
+            order.customer_notes = (
+                f"{existing_notes}\n\n--- Delivery Details ---\n"
+                f"{delivery_notes}"
+            ).strip()
+            order.save(update_fields=['customer_notes', 'updated_at'])
+            logger.info(f"save_delivery_info: Updated order {order_number} with delivery details")
+        except Order.DoesNotExist:
+            logger.error(f"save_delivery_info: Order {order_id} not found")
+        except Exception as exc:
+            logger.error(f"save_delivery_info: Error updating order: {exc}", exc_info=True)
+
+    # ── 3. Update Customer record with address + GPS ──────────────
+    try:
+        customer = Customer.objects.filter(phone_number=contact.phone_number).first()
+        if customer:
+            if delivery_address and not customer.address_line1:
+                customer.address_line1 = delivery_address[:255]
+            if gps_lat and gps_lng:
+                customer.gps_latitude = gps_lat
+                customer.gps_longitude = gps_lng
+            customer.save(update_fields=['address_line1', 'gps_latitude', 'gps_longitude'])
+    except Exception as exc:
+        logger.warning(f"save_delivery_info: Could not update customer: {exc}")
+
+    # ── 4. Send confirmation message to customer ──────────────────
+    delivery_block = (
+        f"📦 *Delivery To:*\n"
+        f"  👤 {recipient_name}\n"
+        f"  📱 {recipient_phone}\n"
+        f"  🏠 {delivery_address}"
+    )
+    if location_text:
+        delivery_block += f"\n  {location_text}"
+
+    confirmation = (
+        f"✅ *Order {order_number} — Confirmed!*\n\n"
+        f"📋 *Items:*\n{items_text}\n\n"
+        f"💰 *Total:* ${total_amount} {currency}\n\n"
+        f"{delivery_block}\n\n"
+        f"Our team will be in touch to arrange delivery. Thank you! 🙏"
+    )
+
+    context['_dynamic_messages'] = context.get('_dynamic_messages', [])
+    context['_dynamic_messages'].append({
+        'type': 'send_whatsapp_message',
+        'recipient_wa_id': contact.phone_number,
+        'message_type': 'text',
+        'data': {'body': confirmation},
+    })
+
+    # ── 5. Notify team via notification system ────────────────────
+    try:
+        from notifications.tasks import send_notification_task
+
+        notification_context = {
+            'customer_name': customer_name,
+            'customer_phone': contact.phone_number,
+            'order_number': order_number,
+            'items_summary': items_text,
+            'total_amount': f"${total_amount} {currency}",
+            'recipient_name': recipient_name,
+            'recipient_phone': recipient_phone,
+            'delivery_address': delivery_address,
+            'location': location_text or '(not provided)',
+            'customer_note': context.get('customer_note', '(none)'),
+        }
+        send_notification_task.delay(
+            template_name='new_catalog_order',
+            context=notification_context,
+            group='sales_team',
+        )
+    except Exception as exc:
+        # Notification failure should not block order completion
+        logger.warning(f"Team notification failed for order {order_number}: {exc}")
+
+    logger.info(
+        f"save_delivery_info: Completed for order {order_number} — "
+        f"recipient={recipient_name}, address={delivery_address}"
+    )
+    return context

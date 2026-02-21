@@ -526,10 +526,14 @@ class MetaWebhookAPIView(View):
 
         When a customer browses the native WhatsApp catalog, adds items to
         their cart, and taps "Send", WhatsApp delivers a message with
-        type="order".  This method delegates to ``process_order_from_catalog``
-        which creates Order + OrderItems and sends a confirmation.
+        type="order".  This method:
+        1. Calls ``process_order_from_catalog`` to create Order + OrderItems.
+        2. Starts the ``order_delivery_info`` flow to collect recipient /
+           address / location details.
         """
         from flows.services import process_order_from_catalog
+        from flows.models import Flow, FlowStep, FlowSession
+        from flows.tasks import process_flow_continuation_task
         from conversations.models import Conversation
 
         whatsapp_message_id = msg_data.get("id")
@@ -583,8 +587,8 @@ class MetaWebhookAPIView(View):
             },
         )
 
-        # Process the order (creates DB records, sends confirmation)
-        success, notes = process_order_from_catalog(msg_data, contact)
+        # Process the order (creates DB records)
+        success, notes, order_context = process_order_from_catalog(msg_data, contact)
 
         if log_entry and log_entry.pk:
             self._save_log(
@@ -592,6 +596,57 @@ class MetaWebhookAPIView(View):
                 'processed' if success else 'failed',
                 notes,
             )
+
+        # If order was created successfully, start the delivery-info flow
+        # so the user is prompted for recipient / address / location.
+        if success and order_context:
+            try:
+                delivery_flow = Flow.objects.filter(
+                    name='order_delivery_info', is_active=True
+                ).first()
+                if delivery_flow:
+                    entry_step = FlowStep.objects.filter(
+                        flow=delivery_flow, is_entry_point=True
+                    ).first()
+                    if entry_step:
+                        # End any active sessions first
+                        FlowSession.objects.filter(
+                            contact=contact, status='active'
+                        ).update(
+                            status='completed',
+                            completed_at=timezone.now(),
+                        )
+                        FlowSession.objects.create(
+                            contact=contact,
+                            flow=delivery_flow,
+                            current_step=entry_step,
+                            status='active',
+                            context_data=order_context,
+                        )
+                        # Trigger the flow engine to execute the entry step
+                        # and send the first question to the user.
+                        transaction.on_commit(
+                            lambda: process_flow_continuation_task.delay(
+                                contact.id,
+                                {'type': 'internal_flow_start'},
+                            )
+                        )
+                        logger.info(
+                            f"Started order_delivery_info flow for "
+                            f"order {order_context.get('order_number')}"
+                        )
+                    else:
+                        logger.error("order_delivery_info flow has no entry point")
+                else:
+                    logger.warning(
+                        "order_delivery_info flow not found or inactive. "
+                        "Skipping delivery info collection."
+                    )
+            except Exception as exc:
+                logger.error(
+                    f"Failed to start delivery info flow: {exc}",
+                    exc_info=True,
+                )
 
         # Send read receipt
         self._send_read_receipt(whatsapp_message_id, active_config)
