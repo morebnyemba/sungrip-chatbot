@@ -5,11 +5,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from 'sonner';
 import {
   FiSend, FiUsers, FiMessageSquare, FiSearch, FiLoader, FiAlertCircle,
-  FiPaperclip, FiArrowLeft, FiCheck, FiClock, FiMoreVertical, FiChevronRight
+  FiPaperclip, FiArrowLeft, FiCheck, FiClock, FiMoreVertical, FiChevronRight,
+  FiPhone, FiMapPin
 } from 'react-icons/fi';
+import { BsWhatsapp } from 'react-icons/bs';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { contactsApi, API_BASE_URL } from '@/lib/api';
 import { selectedContactAtom } from '@/atoms/conversationAtoms';
@@ -245,14 +248,47 @@ export default function ConversationsPage() {
                 </div>
               </div>
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><FiMoreVertical className="h-5 w-5" /></Button></DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem>View profile</DropdownMenuItem>
-                <DropdownMenuItem>Mark as unread</DropdownMenuItem>
-                <DropdownMenuItem className="text-destructive">Delete chat</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center gap-1">
+              <TooltipProvider delayDuration={100}>
+                {selectedContact.phone_number && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" asChild>
+                        <a href={`tel:${selectedContact.phone_number}`} aria-label="Call">
+                          <FiPhone className="h-5 w-5 text-green-600" />
+                        </a>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">Call</TooltipContent>
+                  </Tooltip>
+                )}
+                {(selectedContact.whatsapp_id || selectedContact.phone_number) && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" asChild>
+                        <a
+                          href={`https://wa.me/${(selectedContact.whatsapp_id || selectedContact.phone_number).replace(/\D/g, '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Open in WhatsApp"
+                        >
+                          <BsWhatsapp className="h-5 w-5 text-green-500" />
+                        </a>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">Open in WhatsApp</TooltipContent>
+                  </Tooltip>
+                )}
+              </TooltipProvider>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><FiMoreVertical className="h-5 w-5" /></Button></DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem>View profile</DropdownMenuItem>
+                  <DropdownMenuItem>Mark as unread</DropdownMenuItem>
+                  <DropdownMenuItem className="text-destructive">Delete chat</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
 
           {selectedContact.needs_human_intervention && (

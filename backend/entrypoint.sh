@@ -55,15 +55,10 @@ if [ "$1" = "web" ]; then
     echo "Collecting static files..."
     python manage.py collectstatic --noinput --clear
     
-    echo "Starting Gunicorn server..."
-    exec gunicorn sungrip_backend.wsgi:application \
-        --bind 0.0.0.0:8000 \
-        --workers 4 \
-        --threads 2 \
-        --timeout 120 \
-        --access-logfile - \
-        --error-logfile - \
-        --log-level info
+    echo "Starting Daphne ASGI server (WebSocket support)..."
+    exec daphne -b 0.0.0.0 -p 8000 \
+        --access-log - \
+        sungrip_backend.asgi:application
 elif [ "$1" = "celery_worker" ]; then
     wait_for_migrations
     echo "Starting Celery worker..."

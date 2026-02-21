@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import {
   FiSearch, FiSettings, FiMessageSquare, FiMenu, FiHome, FiX,
   FiChevronLeft, FiChevronRight, FiUsers, FiImage, FiUser, FiBell,
-  FiHelpCircle, FiLogOut, FiBarChart2, FiActivity, FiCreditCard
+  FiHelpCircle, FiLogOut, FiBarChart2, FiActivity, FiCreditCard, FiBox
 } from 'react-icons/fi';
 
 const DashboardBackground = () => (
@@ -36,9 +36,10 @@ export default function DashboardLayout() {
   const navigationLinks = [
     { to: '/dashboard', label: 'Dashboard', icon: <FiHome className="h-5 w-5" /> },
     { to: '/conversation', label: 'Conversations', icon: <FiMessageSquare className="h-5 w-5" /> },
-    { to: '/contacts', label: 'Contacts', icon: <FiUsers className="h-5 w-5" /> },
+    { to: '/contacts', label: 'Customer Profiles', icon: <FiUsers className="h-5 w-5" /> },
     { to: '/installation-requests', label: 'Installation Requests', icon: <FiActivity className="h-5 w-5" /> },
     { to: '/orders', label: 'Orders', icon: <FiCreditCard className="h-5 w-5" /> },
+    { to: '/products', label: 'Products', icon: <FiBox className="h-5 w-5" /> },
     { to: '/site-assessments', label: 'Site Assessments', icon: <FiBarChart2 className="h-5 w-5" /> },
     { to: '/analytics', label: 'Analytics', icon: <FiBarChart2 className="h-5 w-5" /> },
     { to: '/media-library', label: 'Media Library', icon: <FiImage className="h-5 w-5" /> },
