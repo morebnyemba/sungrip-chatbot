@@ -48,9 +48,14 @@ wait_for_migrations() {
 # Run migrations
 if [ "$1" = "web" ]; then
     echo "Running database migrations..."
+    # Generate migrations first (files are .gitignored so won't exist in a fresh container)
+    python manage.py makemigrations --noinput
     # Apply built-in app migrations first so auth tables exist before syncdb.
     python manage.py migrate --noinput
-    python manage.py migrate --noinput --run-syncdb
+
+    
+    echo "Creating/syncing flow definitions..."
+    python manage.py create_flow --flow=all || echo "Warning: Failed to create flow definitions"
     
     echo "Collecting static files..."
     python manage.py collectstatic --noinput --clear

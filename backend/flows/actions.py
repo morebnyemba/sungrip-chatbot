@@ -1183,7 +1183,7 @@ def save_delivery_info(contact, context: dict, params: dict) -> dict:
         location_pin      – Location dict from WhatsApp, "skip_location", or text
         customer_name     – Name of the ordering customer (for notification)
     """
-    from orders.models import Order
+    from orders.models import Order, ProductOrder
     from customers.models import Customer
     from meta_integration.utils import send_whatsapp_message
 
@@ -1233,6 +1233,16 @@ def save_delivery_info(contact, context: dict, params: dict) -> dict:
             ).strip()
             order.save(update_fields=['customer_notes', 'updated_at'])
             logger.info(f"save_delivery_info: Updated order {order_number} with delivery details")
+
+            # Also update linked ProductOrder records with delivery info
+            try:
+                ProductOrder.objects.filter(full_order=order).update(
+                    delivery_address=delivery_address,
+                    delivery_method='delivery',
+                )
+            except Exception as po_exc:
+                logger.warning(f"save_delivery_info: Failed to update ProductOrders: {po_exc}")
+
         except Order.DoesNotExist:
             logger.error(f"save_delivery_info: Order {order_id} not found")
         except Exception as exc:

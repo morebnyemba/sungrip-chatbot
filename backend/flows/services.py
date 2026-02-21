@@ -1675,7 +1675,7 @@ def process_order_from_catalog(
     from decimal import Decimal, InvalidOperation
 
     from customers.models import Customer
-    from orders.models import Order, OrderItem
+    from orders.models import Order, OrderItem, ProductOrder
     from products.models import Product
     from meta_integration.utils import send_whatsapp_message
 
@@ -1781,6 +1781,30 @@ def process_order_from_catalog(
                 unit_price=li['unit_price'],
                 total_price=li['total_price'],
             )
+
+        # 7. Create ProductOrder records (visible in frontend dashboard)
+        for li in line_items:
+            try:
+                ProductOrder.objects.create(
+                    customer=customer,
+                    contact=contact,
+                    customer_name=customer.full_name or contact.phone_number,
+                    customer_phone=contact.phone_number,
+                    product=li['product'],
+                    product_name=li['name'],
+                    product_sku=li['sku'],
+                    quantity=li['quantity'],
+                    unit_price=li['unit_price'],
+                    total_price=li['total_price'],
+                    currency=currency,
+                    status='pending',
+                    full_order=order,
+                    customer_notes=customer_note or '',
+                )
+            except Exception as po_exc:
+                logger.warning(
+                    f"Failed to create ProductOrder for SKU {li['sku']}: {po_exc}"
+                )
 
         logger.info(
             f"Created catalog order {order_number} for "

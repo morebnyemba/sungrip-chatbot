@@ -28,7 +28,7 @@ INSTALLATION_SCHEDULING_FLOW = {
             },
             "transitions": [
                 {
--                    "to_step": "check_whatsapp_flow",
+                    "to_step": "check_whatsapp_flow",
                     "condition_config": {"type": "auto"},
                     "priority": 1
                 }
