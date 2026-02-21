@@ -794,6 +794,61 @@ def _trigger_new_flow(
     return session
 
 
+def _is_first_contact_message(contact: 'Contact') -> bool:
+    """
+    Check if this is the very first interaction from this contact.
+    Returns True if the contact has never had any FlowSession.
+    """
+    return not FlowSession.objects.filter(contact=contact).exists()
+
+
+def _trigger_main_menu_for_first_contact(
+    contact: 'Contact',
+) -> Optional[FlowSession]:
+    """
+    Auto-trigger the main_menu flow for a first-time contact,
+    regardless of keyword match.
+    Returns the new FlowSession if triggered, None otherwise.
+    """
+    main_menu_flow = Flow.objects.filter(
+        name='main_menu', is_active=True
+    ).first()
+
+    if not main_menu_flow:
+        logger.warning("No active 'main_menu' flow found for first-contact auto-trigger.")
+        return None
+
+    entry_step = FlowStep.objects.filter(
+        flow=main_menu_flow, is_entry_point=True
+    ).first()
+
+    if not entry_step:
+        logger.error("Main menu flow has no entry point for first-contact auto-trigger.")
+        return None
+
+    # End any existing active sessions (defensive)
+    FlowSession.objects.filter(
+        contact=contact, status='active'
+    ).update(
+        status='abandoned',
+        completed_at=timezone.now()
+    )
+
+    session = FlowSession.objects.create(
+        contact=contact,
+        flow=main_menu_flow,
+        current_step=entry_step,
+        status='active',
+        context_data={}
+    )
+
+    logger.info(
+        f"Auto-triggered main_menu flow for first-time contact "
+        f"{contact.phone_number}"
+    )
+    return session
+
+
 # ---------------------------------------------------------------------------
 # Transition helper
 # ---------------------------------------------------------------------------
@@ -1059,7 +1114,12 @@ def process_message_for_flow(
 
             session = _trigger_new_flow(contact, text)
             if not session:
-                return []
+                # If no keyword matched but this is the contact's first-ever
+                # message, auto-trigger the main menu so they get a welcome.
+                if _is_first_contact_message(contact):
+                    session = _trigger_main_menu_for_first_contact(contact)
+                if not session:
+                    return []
 
             # Re-fetch with prefetch
             session = (
