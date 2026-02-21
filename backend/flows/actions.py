@@ -178,9 +178,7 @@ def save_quote_request(contact, context: dict, params: dict) -> dict:
         - save_to_variable: Variable name to save result (default: 'quote_request_saved')
     
     Uses context variables:
-        - monthly_bill: Customer's monthly bill
-        - roof_type: Type of roof
-        - location: Customer location
+        - monthly_bill, roof_type, property_type, location, location_pin
     """
     from orders.models import QuoteRequest
     from customers.models import Customer
@@ -193,15 +191,34 @@ def save_quote_request(contact, context: dict, params: dict) -> dict:
         
         # Extract data from context
         monthly_bill = context.get('monthly_bill')
-        roof_type = context.get('roof_type')
-        location = context.get('location')
-        customer_name = getattr(contact, 'profile_name', None) or getattr(contact, 'name', 'Unknown') if contact else 'Unknown'
+        roof_type = context.get('roof_type', '')
+        property_type = context.get('property_type', '')
+        location = context.get('location', '')
+        location_pin = context.get('location_pin')
+        customer_name = context.get('customer_name') or (
+            getattr(contact, 'profile_name', None) or getattr(contact, 'name', 'Unknown')
+            if contact else 'Unknown'
+        )
         
-        # Try to find or create customer
+        # Try to find customer
         customer = None
-        if contact and hasattr(contact, 'customer'):
-            customer = contact.customer
+        if contact:
+            customer = Customer.objects.filter(
+                phone_number=contact.phone_number
+            ).first()
         
+        # Build notes from extra fields
+        notes_parts = []
+        if property_type:
+            notes_parts.append(f"Property type: {property_type}")
+        if location_pin and isinstance(location_pin, dict):
+            lat = location_pin.get('latitude', '')
+            lng = location_pin.get('longitude', '')
+            if lat and lng:
+                notes_parts.append(f"GPS: {lat}, {lng}")
+        elif location_pin and str(location_pin) != 'skip_location':
+            notes_parts.append(f"Location pin: {location_pin}")
+
         # Create QuoteRequest in database
         quote_request_obj = QuoteRequest.objects.create(
             customer=customer,
@@ -211,6 +228,7 @@ def save_quote_request(contact, context: dict, params: dict) -> dict:
             monthly_bill=monthly_bill,
             roof_type=roof_type,
             location=location,
+            notes='\n'.join(notes_parts),
             status='pending'
         )
         
@@ -220,6 +238,7 @@ def save_quote_request(contact, context: dict, params: dict) -> dict:
             'request_id': request_id,
             'monthly_bill': monthly_bill,
             'roof_type': roof_type,
+            'property_type': property_type,
             'location': location,
             'customer_name': customer_name,
             'timestamp': timezone.now().isoformat()
@@ -236,6 +255,130 @@ def save_quote_request(contact, context: dict, params: dict) -> dict:
             'message': f'Error saving quote request: {str(e)}'
         }
     
+    return context
+
+
+@register_flow_action('save_installation_request')
+def save_installation_request(contact, context: dict, params: dict) -> dict:
+    """
+    Saves an installation scheduling request from the chatbot flow.
+
+    Uses context variables:
+        system_size, payment_preference, preferred_date, time_preference,
+        installation_address, location_pin, additional_notes, customer_name
+    """
+    from orders.models import InstallationRequest
+    from customers.models import Customer
+
+    save_to_var = params.get('save_to_variable', 'install_request_saved')
+
+    try:
+        request_id = f"INST-{timezone.now().strftime('%Y%m%d%H%M%S')}"
+
+        customer_name = context.get('customer_name') or (
+            getattr(contact, 'profile_name', None) or 'Unknown'
+            if contact else 'Unknown'
+        )
+
+        customer = None
+        if contact:
+            customer = Customer.objects.filter(
+                phone_number=contact.phone_number
+            ).first()
+
+        location_pin = context.get('location_pin')
+        location_data = {}
+        if isinstance(location_pin, dict):
+            location_data = location_pin
+        elif location_pin and str(location_pin) != 'skip_location':
+            location_data = {'raw': str(location_pin)}
+
+        obj = InstallationRequest.objects.create(
+            customer=customer,
+            contact=contact,
+            request_id=request_id,
+            customer_name=customer_name,
+            system_size=context.get('system_size', ''),
+            payment_preference=context.get('payment_preference', ''),
+            preferred_date=context.get('preferred_date', ''),
+            time_preference=context.get('time_preference', ''),
+            installation_address=context.get('installation_address', ''),
+            location_pin=location_data,
+            additional_notes=context.get('additional_notes', ''),
+            status='pending',
+        )
+
+        context[save_to_var] = {
+            'success': True,
+            'id': obj.id,
+            'request_id': request_id,
+            'timestamp': timezone.now().isoformat(),
+        }
+        logger.info(f"Installation request saved: {request_id}")
+
+    except Exception as e:
+        logger.error(f"Error saving installation request: {e}", exc_info=True)
+        context[save_to_var] = {
+            'success': False,
+            'message': str(e),
+        }
+
+    return context
+
+
+@register_flow_action('save_support_request')
+def save_support_request(contact, context: dict, params: dict) -> dict:
+    """
+    Saves a support request from the chatbot flow.
+
+    Uses context variables:
+        support_category, issue_details, contact_method, customer_name
+    """
+    from orders.models import SupportRequest
+    from customers.models import Customer
+
+    save_to_var = params.get('save_to_variable', 'support_request_saved')
+
+    try:
+        request_id = f"SUP-{timezone.now().strftime('%Y%m%d%H%M%S')}"
+
+        customer_name = context.get('customer_name') or (
+            getattr(contact, 'profile_name', None) or 'Unknown'
+            if contact else 'Unknown'
+        )
+
+        customer = None
+        if contact:
+            customer = Customer.objects.filter(
+                phone_number=contact.phone_number
+            ).first()
+
+        obj = SupportRequest.objects.create(
+            customer=customer,
+            contact=contact,
+            request_id=request_id,
+            customer_name=customer_name,
+            support_category=context.get('support_category', ''),
+            issue_details=context.get('issue_details', ''),
+            contact_method=context.get('contact_method', ''),
+            status='pending',
+        )
+
+        context[save_to_var] = {
+            'success': True,
+            'id': obj.id,
+            'request_id': request_id,
+            'timestamp': timezone.now().isoformat(),
+        }
+        logger.info(f"Support request saved: {request_id}")
+
+    except Exception as e:
+        logger.error(f"Error saving support request: {e}", exc_info=True)
+        context[save_to_var] = {
+            'success': False,
+            'message': str(e),
+        }
+
     return context
 
 
@@ -811,9 +954,17 @@ def send_group_notification(contact, context: dict, params: dict) -> dict:
     try:
         from notifications.services import queue_notifications_to_users
 
+        notification_ctx = context.copy()
+        # Ensure customer_phone is available for templates
+        if contact and 'customer_phone' not in notification_ctx:
+            notification_ctx['customer_phone'] = getattr(
+                contact, 'phone_number', ''
+            )
+        notification_ctx.setdefault('timestamp', timezone.now().strftime('%Y-%m-%d %H:%M'))
+
         queue_notifications_to_users(
             template_name=template_name,
-            template_context=context.copy(),
+            template_context=notification_ctx,
             group_names=group_names or None,
             user_ids=user_ids or None,
             contact_ids=contact_ids or None,
@@ -1023,7 +1174,7 @@ def save_delivery_info(contact, context: dict, params: dict) -> dict:
 
     # ── 5. Notify team via notification system ────────────────────
     try:
-        from notifications.tasks import send_notification_task
+        from notifications.services import queue_notifications_to_users
 
         notification_context = {
             'customer_name': customer_name,
@@ -1036,11 +1187,13 @@ def save_delivery_info(contact, context: dict, params: dict) -> dict:
             'delivery_address': delivery_address,
             'location': location_text or '(not provided)',
             'customer_note': context.get('customer_note', '(none)'),
+            'timestamp': timezone.now().strftime('%Y-%m-%d %H:%M'),
         }
-        send_notification_task.delay(
-            template_name='new_catalog_order',
-            context=notification_context,
-            group='sales_team',
+        queue_notifications_to_users(
+            template_name='sungrip_new_product_order',
+            template_context=notification_context,
+            group_names=['Sales Team'],
+            related_contact=contact,
         )
     except Exception as exc:
         # Notification failure should not block order completion

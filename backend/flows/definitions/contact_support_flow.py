@@ -317,7 +317,7 @@ CONTACT_SUPPORT_FLOW = {
             },
             "transitions": [
                 {
-                    "to_step": "confirm_support",
+                    "to_step": "save_and_notify_support",
                     "priority": 1,
                     "condition_config": {
                         "type": "interactive_reply_id_equals",
@@ -336,6 +336,33 @@ CONTACT_SUPPORT_FLOW = {
                     "to_step": "end_cancelled",
                     "priority": 3,
                     "condition_config": {"type": "always_true"}
+                }
+            ]
+        },
+        # ── Save to DB & notify team ──────────────────────────────────
+        {
+            "name": "save_and_notify_support",
+            "type": "action",
+            "config": {
+                "actions_to_run": [
+                    {
+                        "action_type": "save_support_request",
+                        "parameters": {}
+                    },
+                    {
+                        "action_type": "send_group_notification",
+                        "parameters": {
+                            "template_name": "sungrip_new_support_request",
+                            "group_names": ["Support Team", "Sales Team"]
+                        }
+                    }
+                ]
+            },
+            "transitions": [
+                {
+                    "to_step": "confirm_support",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
                 }
             ]
         },

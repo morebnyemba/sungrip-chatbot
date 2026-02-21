@@ -92,10 +92,12 @@ SUNGRIP_TEMPLATES = [
             "━━━━━━━━━━━━━━━━━━━━\n"
             "👤 *Customer:* {{ customer_name }}\n"
             "📱 *Phone:* {{ customer_phone }}\n"
-            "📦 *Package:* {{ package_name }}\n"
-            "📍 *Address:* {{ installation_address }}\n"
+            "⚡ *System:* {{ system_size }}\n"
+            "💳 *Payment:* {{ payment_preference }}\n"
             "🗓️ *Preferred Date:* {{ preferred_date }}\n"
-            "⏰ *Time Slot:* {{ time_slot }}\n"
+            "⏰ *Time:* {{ time_preference }}\n"
+            "📍 *Address:* {{ installation_address }}\n"
+            "📝 *Notes:* {{ additional_notes }}\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
             "Please confirm the installation slot and contact the customer."
         ),
@@ -105,6 +107,24 @@ SUNGRIP_TEMPLATES = [
     },
 
     # ── Contact / support ─────────────────────────────────────────────
+    {
+        "name": "sungrip_new_support_request",
+        "description": "Notifies the Support Team when a customer submits a support request via the chatbot.",
+        "message_body": (
+            "💬 *New Support Request — Sungrip Solar*\n\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "👤 *Customer:* {{ customer_name }}\n"
+            "📱 *Phone:* {{ customer_phone }}\n"
+            "📋 *Category:* {{ support_category }}\n"
+            "📝 *Details:* {{ issue_details }}\n"
+            "📞 *Contact via:* {{ contact_method }}\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Please respond to the customer within 24 hours."
+        ),
+        "buttons": [],
+        "body_parameters": {},
+        "sync_status": "disabled",
+    },
     {
         "name": "sungrip_human_handover_required",
         "description": "Notifies support staff when the chatbot escalates to a human agent.",

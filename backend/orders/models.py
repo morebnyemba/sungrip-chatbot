@@ -467,6 +467,103 @@ class PaymentSchedule(models.Model):
         return self.status in ['pending', 'due'] and self.due_date < timezone.now().date()
 
 
+class InstallationRequest(models.Model):
+    """Preliminary installation scheduling request from chatbot flow"""
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending Review'),
+        ('contacted', 'Customer Contacted'),
+        ('scheduled', 'Installation Scheduled'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    customer = models.ForeignKey(
+        Customer, on_delete=models.CASCADE,
+        related_name='installation_requests',
+        null=True, blank=True,
+    )
+    contact = models.ForeignKey(
+        'conversations.Contact', on_delete=models.CASCADE,
+        related_name='installation_requests',
+        null=True, blank=True,
+    )
+
+    request_id = models.CharField(max_length=100, unique=True)
+    customer_name = models.CharField(max_length=200, blank=True)
+
+    # Details from the chatbot flow
+    system_size = models.CharField(max_length=100, blank=True)
+    payment_preference = models.CharField(max_length=100, blank=True)
+    preferred_date = models.CharField(max_length=200, blank=True)
+    time_preference = models.CharField(max_length=100, blank=True)
+    installation_address = models.TextField(blank=True)
+    location_pin = models.JSONField(default=dict, blank=True)
+    additional_notes = models.TextField(blank=True)
+
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True,
+    )
+    notes = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Installation Request'
+        verbose_name_plural = 'Installation Requests'
+
+    def __str__(self):
+        return f"Install Request {self.request_id} — {self.customer_name or 'Unknown'}"
+
+
+class SupportRequest(models.Model):
+    """Customer support request from chatbot flow"""
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending Review'),
+        ('in_progress', 'In Progress'),
+        ('resolved', 'Resolved'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    customer = models.ForeignKey(
+        Customer, on_delete=models.CASCADE,
+        related_name='support_requests',
+        null=True, blank=True,
+    )
+    contact = models.ForeignKey(
+        'conversations.Contact', on_delete=models.CASCADE,
+        related_name='support_requests',
+        null=True, blank=True,
+    )
+
+    request_id = models.CharField(max_length=100, unique=True)
+    customer_name = models.CharField(max_length=200, blank=True)
+
+    # Details from the chatbot flow
+    support_category = models.CharField(max_length=100, blank=True)
+    issue_details = models.TextField(blank=True)
+    contact_method = models.CharField(max_length=50, blank=True)
+
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True,
+    )
+    notes = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Support Request'
+        verbose_name_plural = 'Support Requests'
+
+    def __str__(self):
+        return f"Support Request {self.request_id} — {self.customer_name or 'Unknown'}"
+
+
 class ProductOrder(models.Model):
     """
     Lightweight product order created directly from the WhatsApp catalog flow.

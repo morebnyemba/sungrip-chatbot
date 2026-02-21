@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     PaymentPlan, QuoteRequest, Quote, QuoteItem, 
     Order, OrderItem, Installation, PaymentSchedule,
-    ProductOrder,
+    ProductOrder, InstallationRequest, SupportRequest,
 )
 
 
@@ -84,5 +84,43 @@ class QuoteRequestAdmin(admin.ModelAdmin):
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
+    )
+
+
+@admin.register(InstallationRequest)
+class InstallationRequestAdmin(admin.ModelAdmin):
+    list_display = ['request_id', 'customer_name', 'system_size', 'preferred_date', 'status', 'created_at']
+    list_filter = ['status', 'created_at']
+    search_fields = ['request_id', 'customer_name', 'installation_address']
+    readonly_fields = ['request_id', 'created_at', 'updated_at']
+    date_hierarchy = 'created_at'
+
+    fieldsets = (
+        ('Request', {'fields': ('request_id', 'status', 'customer', 'contact', 'customer_name')}),
+        ('Installation Details', {
+            'fields': (
+                'system_size', 'payment_preference', 'preferred_date',
+                'time_preference', 'installation_address', 'location_pin',
+                'additional_notes',
+            ),
+        }),
+        ('Notes', {'fields': ('notes',)}),
+        ('Metadata', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),
+    )
+
+
+@admin.register(SupportRequest)
+class SupportRequestAdmin(admin.ModelAdmin):
+    list_display = ['request_id', 'customer_name', 'support_category', 'contact_method', 'status', 'created_at']
+    list_filter = ['status', 'support_category', 'contact_method', 'created_at']
+    search_fields = ['request_id', 'customer_name', 'issue_details']
+    readonly_fields = ['request_id', 'created_at', 'updated_at']
+    date_hierarchy = 'created_at'
+
+    fieldsets = (
+        ('Request', {'fields': ('request_id', 'status', 'customer', 'contact', 'customer_name')}),
+        ('Support Details', {'fields': ('support_category', 'issue_details', 'contact_method')}),
+        ('Notes', {'fields': ('notes',)}),
+        ('Metadata', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),
     )
 

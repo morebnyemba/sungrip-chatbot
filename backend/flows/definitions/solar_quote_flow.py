@@ -404,7 +404,7 @@ v                }
             },
             "transitions": [
                 {
-                    "to_step": "provide_quote",
+                    "to_step": "save_and_notify_quote",
                     "priority": 1,
                     "condition_config": {
                         "type": "interactive_reply_id_equals",
@@ -423,6 +423,33 @@ v                }
                     "to_step": "end_cancelled",
                     "priority": 3,
                     "condition_config": {"type": "always_true"}
+                }
+            ]
+        },
+        # ── Save to DB & notify team ──────────────────────────────────
+        {
+            "name": "save_and_notify_quote",
+            "type": "action",
+            "config": {
+                "actions_to_run": [
+                    {
+                        "action_type": "save_quote_request",
+                        "parameters": {}
+                    },
+                    {
+                        "action_type": "send_group_notification",
+                        "parameters": {
+                            "template_name": "sungrip_new_quote_request",
+                            "group_names": ["Sales Team"]
+                        }
+                    }
+                ]
+            },
+            "transitions": [
+                {
+                    "to_step": "provide_quote",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
                 }
             ]
         },

@@ -591,7 +591,7 @@ INSTALLATION_SCHEDULING_FLOW = {
             },
             "transitions": [
                 {
-                    "to_step": "confirm_scheduling",
+                    "to_step": "save_and_notify_install",
                     "priority": 1,
                     "condition_config": {
                         "type": "interactive_reply_id_equals",
@@ -610,6 +610,33 @@ INSTALLATION_SCHEDULING_FLOW = {
                     "to_step": "end_cancelled",
                     "priority": 3,
                     "condition_config": {"type": "always_true"}
+                }
+            ]
+        },
+        # ── Save to DB & notify team ──────────────────────────────────
+        {
+            "name": "save_and_notify_install",
+            "type": "action",
+            "config": {
+                "actions_to_run": [
+                    {
+                        "action_type": "save_installation_request",
+                        "parameters": {}
+                    },
+                    {
+                        "action_type": "send_group_notification",
+                        "parameters": {
+                            "template_name": "sungrip_new_installation_request",
+                            "group_names": ["Sales Team"]
+                        }
+                    }
+                ]
+            },
+            "transitions": [
+                {
+                    "to_step": "confirm_scheduling",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
                 }
             ]
         },
