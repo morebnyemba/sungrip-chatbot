@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_celery_beat',
     'django_extensions',  # For runscript command
+    'channels',           # WebSocket / ASGI support
     
     # Local apps
     'conversations',
@@ -226,6 +227,19 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Africa/Harare'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60
+
+# Django Channels — ASGI / WebSocket
+ASGI_APPLICATION = 'sungrip_backend.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [os.environ.get('REDIS_URL', 'redis://redis:6379/1')],
+        },
+    },
+}
+
 
 # WhatsApp/Meta Configuration
 WHATSAPP_API_VERSION = os.environ.get('WHATSAPP_API_VERSION', 'v18.0')

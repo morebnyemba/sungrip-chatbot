@@ -12,14 +12,24 @@ class Contact(models.Model):
     whatsapp_id = models.CharField(max_length=100, unique=True, help_text="WhatsApp phone number ID")
     phone_number = models.CharField(max_length=20)
     profile_name = models.CharField(max_length=200, blank=True)
+    name = models.CharField(max_length=200, blank=True, help_text="Display name (alias for profile_name)")
     
     # Status
     is_blocked = models.BooleanField(default=False)
     opt_in_status = models.BooleanField(default=True, help_text="Has opted in to receive messages")
+    needs_human_intervention = models.BooleanField(
+        default=False,
+        help_text="When True, automated bot responses are paused for this contact"
+    )
+    
+    # Message summary (updated by webhook processing)
+    last_message_preview = models.CharField(max_length=255, blank=True, help_text="Preview of the last message")
+    unread_count = models.IntegerField(default=0, help_text="Number of unread inbound messages")
     
     # Metadata
     first_message_date = models.DateTimeField(null=True, blank=True)
     last_message_date = models.DateTimeField(null=True, blank=True)
+    last_seen = models.DateTimeField(null=True, blank=True, help_text="When the contact was last active")
     message_count = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -30,7 +40,16 @@ class Contact(models.Model):
         verbose_name_plural = 'WhatsApp Contacts'
     
     def __str__(self):
-        return f"{self.profile_name or self.phone_number}"
+        return f"{self.profile_name or self.name or self.phone_number}"
+
+    def save(self, *args, **kwargs):
+        # Keep name and profile_name in sync
+        if self.profile_name and not self.name:
+            self.name = self.profile_name
+        elif self.name and not self.profile_name:
+            self.profile_name = self.name
+        super().save(*args, **kwargs)
+
 
 
 class Conversation(models.Model):

@@ -14,6 +14,7 @@ import InstallationRequestsPage from './pages/InstallationRequestsPage';
 import OrdersPage from './pages/OrdersPage';
 import SiteAssessmentsPage from './pages/SiteAssessmentsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
+import ProductsPage from './pages/ProductsPage';
 
 const NotFoundPage = () => (
   <div className="p-10 text-center">
@@ -51,6 +52,7 @@ const router = createBrowserRouter([
       { path: 'orders', element: <OrdersPage /> },
       { path: 'site-assessments', element: <SiteAssessmentsPage /> },
       { path: 'conversation', element: <Conversation /> },
+      { path: 'products', element: <ProductsPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },
