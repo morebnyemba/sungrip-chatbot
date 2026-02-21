@@ -63,7 +63,8 @@ function OrderDetailDialog({ order, open, onClose, onUpdated }) {
     }
   };
 
-  const waLink = `https://wa.me/${(order.customer_phone || '').replace(/\D/g, '')}`;
+  const waPhone = (order.customer_phone || '').replace(/\D/g, '');
+  const waLink = waPhone ? `https://wa.me/${waPhone}` : null;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -75,7 +76,7 @@ function OrderDetailDialog({ order, open, onClose, onUpdated }) {
           <div><span className="font-medium text-muted-foreground">Customer:</span> <span>{order.customer_name}</span></div>
           <div><span className="font-medium text-muted-foreground">Phone:</span>
             <a href={`tel:${order.customer_phone}`} className="ml-1 text-blue-600 hover:underline">{order.customer_phone}</a>
-            {order.customer_phone && (
+            {waLink && (
               <a href={waLink} target="_blank" rel="noopener noreferrer" className="ml-2 text-green-600 hover:underline text-xs">[WhatsApp]</a>
             )}
           </div>

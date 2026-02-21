@@ -267,7 +267,7 @@ export default function ConversationsPage() {
                     <TooltipTrigger asChild>
                       <Button variant="ghost" size="icon" asChild>
                         <a
-                          href={`https://wa.me/${(selectedContact.whatsapp_id || selectedContact.phone_number).replace(/\D/g, '')}`}
+                          href={`https://wa.me/${(selectedContact.whatsapp_id || selectedContact.phone_number || '').replace(/\D/g, '')}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           aria-label="Open in WhatsApp"

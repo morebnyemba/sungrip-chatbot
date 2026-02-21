@@ -5,13 +5,6 @@ from django.db import models
 from customers.models import Customer
 
 
-"""
-Conversation models for WhatsApp messaging
-"""
-from django.db import models
-from customers.models import Customer
-
-
 class Contact(models.Model):
     """WhatsApp contact"""
     
