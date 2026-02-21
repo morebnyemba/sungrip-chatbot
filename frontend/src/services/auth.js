@@ -6,9 +6,9 @@ const REFRESH_TOKEN_KEY = 'refreshToken';
 
 export const authService = {
   storeTokens(accessToken, refreshToken) {
-    localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+    localStorage.setItem(ACCESS_TOKEN_KEY, JSON.stringify(accessToken));
     if (refreshToken) {
-      localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+      localStorage.setItem(REFRESH_TOKEN_KEY, JSON.stringify(refreshToken));
     }
   },
   clearTokens() {
