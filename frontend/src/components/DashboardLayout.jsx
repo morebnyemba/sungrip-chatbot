@@ -36,7 +36,7 @@ export default function DashboardLayout() {
   const navigationLinks = [
     { to: '/dashboard', label: 'Dashboard', icon: <FiHome className="h-5 w-5" /> },
     { to: '/conversation', label: 'Conversations', icon: <FiMessageSquare className="h-5 w-5" /> },
-    { to: '/contacts', label: 'Customer Profiles', icon: <FiUsers className="h-5 w-5" /> },
+    { to: '/contacts', label: 'Contacts', icon: <FiUsers className="h-5 w-5" /> },
     { to: '/installation-requests', label: 'Installation Requests', icon: <FiActivity className="h-5 w-5" /> },
     { to: '/orders', label: 'Orders', icon: <FiCreditCard className="h-5 w-5" /> },
     { to: '/products', label: 'Products', icon: <FiBox className="h-5 w-5" /> },
@@ -202,7 +202,7 @@ export default function DashboardLayout() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-h-screen md:pt-0 pt-16 overflow-hidden">
-        <header className="hidden md:flex items-center justify-between h-16 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-6">
+        <header className="hidden md:flex items-center justify-between h-16 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-6 flex-shrink-0">
           <div className="flex items-center gap-6">
             <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-100">{pageTitle}</h1>
             <div className="relative max-w-md w-full">
@@ -226,15 +226,15 @@ export default function DashboardLayout() {
             </div>
           </div>
         </header>
-        <main className="flex-1 relative overflow-y-auto">
+        <main className="flex-1 flex flex-col relative overflow-hidden">
           <DashboardBackground />
-          <div className="relative z-10 p-4 sm:p-6 md:p-8">
+          <div className="relative z-10 flex-1 flex flex-col min-h-0 p-4 sm:p-6 md:p-8 overflow-y-auto">
             <React.Suspense fallback={<LayoutSkeleton />}>
               <Outlet />
             </React.Suspense>
           </div>
         </main>
-        <footer className="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 py-4 px-6">
+        <footer className="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 py-4 px-6 flex-shrink-0">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="text-sm text-gray-600 dark:text-gray-400">
               © {new Date().getFullYear()} Sungrip Solar. All rights reserved.

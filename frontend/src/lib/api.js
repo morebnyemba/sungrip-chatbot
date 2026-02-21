@@ -60,7 +60,13 @@ export const contactsApi = {
   get(id) {
     return apiClient.get(`/api/conversations/contacts/${id}/`);
   },
+  retrieve(id) {
+    return apiClient.get(`/api/conversations/contacts/${id}/`);
+  },
   update(id, data) {
+    return apiClient.patch(`/api/conversations/contacts/${id}/`, data);
+  },
+  patch(id, data) {
     return apiClient.patch(`/api/conversations/contacts/${id}/`, data);
   },
   toggleIntervention(id) {
