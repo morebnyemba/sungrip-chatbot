@@ -29,7 +29,11 @@ apiClient.interceptors.response.use(
   async (error) => {
     if (error.response?.status === 401 && !error.config._retry) {
       error.config._retry = true;
-      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+      const rawRefresh = localStorage.getItem(REFRESH_TOKEN_KEY);
+      let refreshToken = null;
+      if (rawRefresh && rawRefresh !== 'null' && rawRefresh !== 'undefined') {
+        try { refreshToken = JSON.parse(rawRefresh); } catch { refreshToken = rawRefresh; }
+      }
       if (refreshToken) {
         try {
           if (!refreshPromise) {
@@ -38,7 +42,7 @@ apiClient.interceptors.response.use(
             }).finally(() => { refreshPromise = null; });
           }
           const { data } = await refreshPromise;
-          localStorage.setItem(ACCESS_TOKEN_KEY, data.access);
+          localStorage.setItem(ACCESS_TOKEN_KEY, JSON.stringify(data.access));
           error.config.headers.Authorization = `Bearer ${data.access}`;
           return apiClient(error.config);
         } catch (refreshError) {

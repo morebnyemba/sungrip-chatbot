@@ -18,10 +18,9 @@ class DashboardStatsView(APIView):
 
     def get(self, request):
         from orders.models import ProductOrder, InstallationRequest
+        from .models import Conversation
 
-        active_conversations = Contact.objects.filter(
-            last_message_date__isnull=False,
-        ).exclude(is_blocked=True).count()
+        active_conversations = Conversation.objects.filter(status='active').count()
         total_contacts = Contact.objects.count()
         pending_orders = ProductOrder.objects.filter(status='pending').count()
         installation_requests = InstallationRequest.objects.filter(
