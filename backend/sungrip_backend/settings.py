@@ -35,7 +35,10 @@ if not SECRET_KEY:
     SECRET_KEY = 'django-insecure-j_(9jg08huqliegd!2z=(v%@kex8l&l*cdi+5l=)pnb4=cao+5'
     print("WARNING: Using default SECRET_KEY. Set SECRET_KEY environment variable in production!")
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.environ.get(
+    'ALLOWED_HOSTS',
+    'localhost,127.0.0.1,api.zimgrow.shop,zimgrow.shop'
+).split(',')
 
 # Backend domain for constructing absolute URLs (e.g. product image URLs for Meta Catalog)
 # Set via BACKEND_DOMAIN env var in production (e.g. 'api.zimgrow.shop')
@@ -43,7 +46,10 @@ BACKEND_DOMAIN = os.environ.get('BACKEND_DOMAIN', 'api.zimgrow.shop')
 
 # CSRF Configuration
 # Required for Django admin behind HTTPS reverse proxy
-CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost:8000,http://127.0.0.1:8000').split(',')
+CSRF_TRUSTED_ORIGINS = os.environ.get(
+    'CSRF_TRUSTED_ORIGINS',
+    'http://localhost:8000,http://127.0.0.1:8000,https://api.zimgrow.shop,https://zimgrow.shop'
+).split(',')
 
 
 # Application definition
@@ -215,7 +221,7 @@ SIMPLE_JWT = {
 }
 
 # CORS Configuration
-CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
+CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,https://zimgrow.shop,https://api.zimgrow.shop').split(',')
 CORS_ALLOW_CREDENTIALS = True
 
 # Celery Configuration

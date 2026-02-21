@@ -163,6 +163,13 @@ def send_whatsapp_message_task(self, outgoing_message_id: int, active_config_id:
         update_fields=['message_id', 'status', 'error_code', 'error_message', 'status_timestamp']
     )
 
+    # Broadcast outbound message to WebSocket subscribers in real time
+    try:
+        from conversations.consumers import broadcast_message_to_websocket
+        broadcast_message_to_websocket(outgoing_msg)
+    except Exception as ws_exc:
+        logger.warning(f"WebSocket broadcast failed for outbound message {outgoing_message_id}: {ws_exc}")
+
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=10)
 def send_read_receipt_task(self, wamid: str, config_id: int, show_typing_indicator: bool = False):

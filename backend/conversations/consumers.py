@@ -18,6 +18,40 @@ from conversations.serializers import MessageSerializer, ContactSerializer
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Broadcast helper — call from anywhere (Celery tasks, views, etc.)
+# ---------------------------------------------------------------------------
+def broadcast_message_to_websocket(message_obj):
+    """
+    Broadcast a Message instance to all WebSocket subscribers of that
+    contact's conversation group.
+
+    Safe to call from synchronous code (Celery tasks, views).
+    """
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+
+    channel_layer = get_channel_layer()
+    if not channel_layer:
+        logger.warning("broadcast_message_to_websocket: No channel layer available")
+        return
+
+    contact_id = message_obj.contact_id
+    group_name = f'conversation_{contact_id}'
+
+    msg_data = MessageSerializer(message_obj).data
+    # Ensure JSON-serializable (datetimes, Decimals, etc.)
+    msg_data = json.loads(json.dumps(msg_data, default=str))
+
+    try:
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {'type': 'new_message', 'message': msg_data},
+        )
+    except Exception as exc:
+        logger.warning(f"broadcast_message_to_websocket failed for contact {contact_id}: {exc}")
+
+
 class ConversationConsumer(AsyncWebsocketConsumer):
     """
     WebSocket consumer for a single contact conversation.
@@ -131,6 +165,7 @@ class ConversationConsumer(AsyncWebsocketConsumer):
             direction='outbound',
             message_type='text',
             content=text,
+            content_payload={'body': text},
             status='pending_dispatch',
             timestamp=timezone.now(),
             app_config=config,
@@ -140,10 +175,10 @@ class ConversationConsumer(AsyncWebsocketConsumer):
         from meta_integration.utils import send_whatsapp_message
         try:
             result = send_whatsapp_message(
-                config=config,
-                to=contact.whatsapp_id,
+                to_phone_number=contact.whatsapp_id,
                 message_type='text',
-                content={'body': text},
+                data={'body': text},
+                config=config,
             )
             wamid = result.get('messages', [{}])[0].get('id') if result else None
             msg.message_id = wamid
@@ -156,13 +191,4 @@ class ConversationConsumer(AsyncWebsocketConsumer):
             msg.save(update_fields=['status', 'error_message'])
 
         # Broadcast new message to all subscribers of this conversation
-        from asgiref.sync import async_to_sync
-        from channels.layers import get_channel_layer
-        channel_layer = get_channel_layer()
-        msg_data = MessageSerializer(msg).data
-        # Convert non-serialisable types to str so JSON dump works
-        msg_data = json.loads(json.dumps(msg_data, default=str))
-        async_to_sync(channel_layer.group_send)(
-            f'conversation_{self.contact_id}',
-            {'type': 'new_message', 'message': msg_data},
-        )
+        broadcast_message_to_websocket(msg)

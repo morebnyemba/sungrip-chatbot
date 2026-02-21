@@ -19,6 +19,7 @@ from flows.definitions.solar_quote_flow import SOLAR_QUOTE_FLOW
 from flows.definitions.installation_scheduling_flow import INSTALLATION_SCHEDULING_FLOW
 from flows.definitions.solar_packages_flow import SOLAR_PACKAGES_FLOW
 from flows.definitions.contact_support_flow import CONTACT_SUPPORT_FLOW
+from flows.definitions.order_delivery_info_flow import ORDER_DELIVERY_INFO_FLOW
 import logging
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--flow',
             type=str,
-            choices=['main_menu', 'solar_quote', 'installation_scheduling', 'solar_packages', 'contact_support', 'all'],
+            choices=['main_menu', 'solar_quote', 'installation_scheduling', 'solar_packages', 'contact_support', 'order_delivery_info', 'all'],
             default='all',
             help='Which flow to create (default: all)'
         )
@@ -52,6 +53,8 @@ class Command(BaseCommand):
             flows_to_create.append(SOLAR_PACKAGES_FLOW)
         if flow_choice in ['contact_support', 'all']:
             flows_to_create.append(CONTACT_SUPPORT_FLOW)
+        if flow_choice in ['order_delivery_info', 'all']:
+            flows_to_create.append(ORDER_DELIVERY_INFO_FLOW)
 
         if not flows_to_create:
             raise CommandError(f"No flows selected for creation with choice '{flow_choice}'.")

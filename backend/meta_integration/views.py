@@ -494,6 +494,15 @@ class MetaWebhookAPIView(View):
         else:
             logger.info(f"Saved incoming message (WAMID: {whatsapp_message_id}) as DB ID {incoming_msg_obj.id}")
 
+        # Broadcast inbound message to WebSocket subscribers in real time
+        try:
+            from conversations.consumers import broadcast_message_to_websocket
+            transaction.on_commit(
+                lambda: broadcast_message_to_websocket(incoming_msg_obj)
+            )
+        except Exception as ws_exc:
+            logger.warning(f"WebSocket broadcast failed for inbound message: {ws_exc}")
+
         # Link log to message
         if log_entry and log_entry.pk:
             log_entry.message = incoming_msg_obj
