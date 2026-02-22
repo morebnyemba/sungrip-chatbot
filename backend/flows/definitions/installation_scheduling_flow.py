@@ -119,7 +119,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                     "priority": 1,
                     "condition_config": {
                         "type": "variable_exists",
-                        "variable_name": "system_size"
+                        "variable_name": "package_name"
                     }
                 },
                 {
@@ -157,7 +157,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "interactive_id",
-                    "save_to_variable": "payment_preference"
+                    "save_to_variable": "package_payment_label"
                 }
             },
             "transitions": [
@@ -200,7 +200,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                 },
                 "reply_config": {
                     "expected_type": "interactive_id",
-                    "save_to_variable": "system_size"
+                    "save_to_variable": "package_name"
                 }
             },
             "transitions": [
@@ -355,105 +355,6 @@ INSTALLATION_SCHEDULING_FLOW = {
                            "✅ *Payment after delivery & installation*\n"
                            "   (Supply & Fix — we deliver, install, then you pay)\n"
                            "━━━━━━━━━━━━━━━━━━━━"
-                }
-            },
-            "transitions": [
-                {
-                    "to_step": "ask_payment_preference",
-                    "condition_config": {"type": "auto"},
-                    "priority": 1
-                }
-            ]
-        },
-        # ── Payment preference ─────────────────────────────────────────
-        {
-            "name": "ask_payment_preference",
-            "type": "question",
-            "config": {
-                "message_config": {
-                    "message_type": "interactive",
-                    "interactive": {
-                        "type": "button",
-                        "header": {"type": "text", "text": "💳 Payment Method"},
-                        "body": {
-                            "text": "How would you like to pay?\n\n"
-                                   "💵 *Cash* — Pay on delivery & installation\n"
-                                   "� *3-Month Plan* — Short-term credit\n"
-                                   "📆 *6-Month Plan* — Spread cost over 6 months"
-                        },
-                        "action": {
-                            "buttons": [
-                                {"type": "reply", "reply": {"id": "cash", "title": "💵 Cash / Full"}},
-                                {"type": "reply", "reply": {"id": "installment_3", "title": "🔥 3-Month Plan"}},
-                                {"type": "reply", "reply": {"id": "installment_6", "title": "📆 6-Month Plan"}}
-                            ]
-                        }
-                    }
-                },
-                "reply_config": {
-                    "expected_type": "interactive_id",
-                    "save_to_variable": "payment_preference"
-                }
-            },
-            "transitions": [
-                {
-                    "to_step": "ask_preferred_date",
-                    "condition_config": {"type": "auto"},
-                    "priority": 1
-                }
-            ]
-        },
-        # ── System size selection (kept for WA path / direct entry) ───
-        {
-            "name": "ask_system_size",
-            "type": "question",
-            "config": {
-                "message_config": {
-                    "message_type": "interactive",
-                    "interactive": {
-                        "type": "list",
-                        "body": {
-                            "text": "⚡ Which system would you like installed?\n\n"
-                                   "Select the size that matches your household needs."
-                        },
-                        "footer": {
-                            "text": "Prices in USD · Installation included"
-                        },
-                        "action": {
-                            "button": "Select System",
-                            "sections": [
-                                {
-                                    "title": "Available Systems",
-                                    "rows": [
-                                        {
-                                            "id": "3.5kva",
-                                            "title": "⚡ 3.5 kVA System",
-                                            "description": "Small home · Fridge, TV, lights, 0.5HP pump"
-                                        },
-                                        {
-                                            "id": "4.2kva",
-                                            "title": "⚡ 4.2 kVA System",
-                                            "description": "Medium home · + Cameras, 0.75HP pump"
-                                        },
-                                        {
-                                            "id": "6.2kva",
-                                            "title": "⚡ 6.2 kVA System",
-                                            "description": "Large home · 3 fridges, 1.5HP pump"
-                                        },
-                                        {
-                                            "id": "not_sure",
-                                            "title": "🤔 Not Sure Yet",
-                                            "description": "Our team will advise on site"
-                                        }
-                                    ]
-                                }
-                            ]
-                        }
-                    }
-                },
-                "reply_config": {
-                    "expected_type": "interactive_id",
-                    "save_to_variable": "system_size"
                 }
             },
             "transitions": [
@@ -643,7 +544,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                 "actions_to_run": [{
                     "action_type": "format_labels",
                     "parameters": {
-                        "variables": ["payment_preference", "system_size", "time_preference"]
+                        "variables": ["time_preference"]
                     }
                 }]
             },
@@ -667,8 +568,8 @@ INSTALLATION_SCHEDULING_FLOW = {
                         "body": {
                             "text": "Hi {{customer_name}}, please review your booking:\n\n"
                                    "━━━━━━━━━━━━━━━━━━━━\n"
-                                   "⚡ *System:* {{system_size}}\n"
-                                   "💳 *Payment:* {{payment_preference}}\n"
+                                   "📦 *Package:* {{package_name}}\n"
+                                   "💳 *Payment:* {{package_payment_label}}\n"
                                    "📅 *Date:* {{preferred_date}}\n"
                                    "🕐 *Time:* {{time_preference}}\n"
                                    "🏠 *Address:* {{installation_address}}\n"
@@ -749,8 +650,8 @@ INSTALLATION_SCHEDULING_FLOW = {
                 "text": {
                     "body": "✅ *Installation Booked!*\n\n"
                            "Thank you, {{customer_name}}! Here's your booking:\n\n"
-                           "⚡ System: {{system_size}}\n"
-                           "💳 Payment: {{payment_preference}}\n"
+                           "📦 Package: {{package_name}}\n"
+                           "💳 Payment: {{package_payment_label}}\n"
                            "📅 Date: {{preferred_date}}\n"
                            "🕐 Time: {{time_preference}}\n"
                            "🏠 Address: {{installation_address}}\n\n"
