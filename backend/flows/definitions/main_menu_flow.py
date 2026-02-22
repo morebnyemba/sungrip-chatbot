@@ -53,10 +53,13 @@ MAIN_MENU_FLOW = {
                             "text": "Hi {{customer_name}}, welcome to *Sungrip Solar* — "
                                    "Zimbabwe's trusted solar energy partner.\n\n"
                                    "🔋 *What we offer:*\n"
-                                   "• Custom solar systems for homes & businesses\n"
-                                   "• Professional installation & maintenance\n"
-                                   "• Flexible packages from 3 kW to 10 kW+\n"
-                                   "• 25-year panel warranty\n\n"
+                                   "1️⃣ Solar systems on credit — pay a small deposit after fix & supply, "
+                                   "delivery and installation included. Use now, pay later while your "
+                                   "business runs, your life runs!\n"
+                                   "2️⃣ Solar systems with warranty agreements and receipts\n"
+                                   "3️⃣ One year after-service support\n"
+                                   "4️⃣ Free quotations & consultations for bigger solar systems "
+                                   "(6.2 kVA+ up to solar farms)\n\n"
                                    "Tap the button below to explore our services 👇"
                         },
                         "footer": {
