@@ -63,7 +63,7 @@ MAIN_MENU_FLOW = {
                                    "Tap the button below to explore our services 👇"
                         },
                         "footer": {
-                            "text": "Powered by Sungrip Solar Energy"
+                            "text": "Powered by slykertech.co.zw"
                         },
                         "action": {
                             "button": "📋 View Options",

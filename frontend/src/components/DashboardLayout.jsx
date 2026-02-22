@@ -254,6 +254,12 @@ export default function DashboardLayout() {
             <div className="text-sm text-gray-600 dark:text-gray-400">
               © {new Date().getFullYear()} Sungrip Solar. All rights reserved.
             </div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              Powered by{' '}
+              <a href="https://slykertech.co.zw" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
+                slykertech.co.zw
+              </a>
+            </div>
           </div>
         </footer>
       </div>

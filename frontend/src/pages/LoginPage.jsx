@@ -88,6 +88,12 @@ export default function LoginPage() {
         </CardContent>
         <CardFooter className="flex flex-col items-center text-xs text-gray-500 dark:text-gray-400 pt-4">
           <p>&copy; {new Date().getFullYear()} Sungrip Solar</p>
+          <p className="mt-1">
+            Powered by{' '}
+            <a href="https://slykertech.co.zw" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
+              slykertech.co.zw
+            </a>
+          </p>
         </CardFooter>
       </Card>
     </div>
