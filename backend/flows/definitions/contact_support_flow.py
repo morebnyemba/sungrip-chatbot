@@ -378,7 +378,7 @@ CONTACT_SUPPORT_FLOW = {
                            "📋 Category: {{support_category}}\n"
                            "📞 We'll contact you via: {{contact_method}}\n\n"
                            "Our support team will get back to you within *24 hours*. "
-                           "For urgent issues, call us directly at *+263 123 456 789*.\n\n"
+                           "For urgent issues, WhatsApp us at *0782 233 111 / 0777 139 159*.\n\n"
                            "Type *menu* to return to the main menu."
                 }
             },

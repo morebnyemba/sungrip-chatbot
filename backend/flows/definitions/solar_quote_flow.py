@@ -473,7 +473,7 @@ SOLAR_QUOTE_FLOW = {
                            "📍 Location: {{location}}\n\n"
                            "Our solar consultant will review your requirements and contact you within "
                            "*24 hours* with a personalised system recommendation & quote.\n\n"
-                           "📞 Need it sooner? Call us at *+263 123 456 789*\n\n"
+                           "📞 Need it sooner? WhatsApp us at *0782 233 111 / 0777 139 159*\n\n"
                            "Type *menu* to return to the main menu."
                 }
             },
