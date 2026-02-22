@@ -242,26 +242,126 @@ INSTALLATION_SCHEDULING_FLOW = {
             "config": {
                 "message_type": "text",
                 "text": {
-                    "body": "📅 *Book Your Installation*\n\n"
-                           "Great choice! Let's get your solar system "
-                           "installation booked. I'll collect a few details "
-                           "and our team will confirm within 24 hours.\n\n"
-                           "This takes less than 2 minutes ⏱️"
+                    "body": "📅 *Book Your Solar Installation*\n\n"
+                           "We install solar systems for *homes, businesses & farms* "
+                           "across Zimbabwe.\n\n"
+                           "✅ Payment after delivery & installation (Supply & Fix)\n"
+                           "✅ 3 investment options: Cash, 3-month & 6-month plans\n\n"
+                           "Let me show you our available packages so you can pick "
+                           "the right one — this takes less than 2 minutes ⏱️"
                 }
             },
             "transitions": [
                 {
-                    "to_step": "ask_preferred_date",
-                    "priority": 1,
-                    "condition_config": {
-                        "type": "variable_exists",
-                        "variable_name": "system_size"
+                    "to_step": "build_packages_list",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        # ── Build dynamic packages list from DB ────────────────────────
+        {
+            "name": "build_packages_list",
+            "type": "action",
+            "config": {
+                "actions_to_run": [
+                    {
+                        "action_type": "build_packages_interactive_list",
+                        "parameters": {}
+                    },
+                    {
+                        "action_type": "send_dynamic_message",
+                        "parameters": {
+                            "message_variable": "_packages_list_msg"
+                        }
+                    }
+                ]
+            },
+            "transitions": [
+                {
+                    "to_step": "capture_package_selection",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        # ── Capture package selection ──────────────────────────────────
+        {
+            "name": "capture_package_selection",
+            "type": "question",
+            "config": {
+                "message_config": {
+                    "message_type": "text",
+                    "text": {
+                        "body": "👆 Tap *View Packages* above to browse, then select the package you'd like installed."
                     }
                 },
+                "reply_config": {
+                    "expected_type": "interactive_id",
+                    "save_to_variable": "selected_package"
+                }
+            },
+            "transitions": [
+                {
+                    "to_step": "load_package_details",
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
+                }
+            ]
+        },
+        # ── Load full package details ──────────────────────────────────
+        {
+            "name": "load_package_details",
+            "type": "action",
+            "config": {
+                "actions_to_run": [
+                    {
+                        "action_type": "fetch_package_details",
+                        "parameters": {
+                            "selection_variable": "selected_package"
+                        }
+                    }
+                ]
+            },
+            "transitions": [
+                {
+                    "to_step": "show_package_and_proceed",
+                    "condition_config": {
+                        "type": "expression",
+                        "expression": "package_found == True"
+                    },
+                    "priority": 1
+                },
+                {
+                    "to_step": "build_packages_list",
+                    "condition_config": {"type": "always_true"},
+                    "priority": 2
+                }
+            ]
+        },
+        # ── Show package details + payment options ─────────────────────
+        {
+            "name": "show_package_and_proceed",
+            "type": "send_message",
+            "config": {
+                "message_type": "text",
+                "text": {
+                    "body": "{{package_detail_text}}\n\n"
+                           "━━━━━━━━━━━━━━━━━━━━\n"
+                           "💳 *3 Investment Options:*\n"
+                           "  1️⃣ *Cash Price* — Pay in full & save\n"
+                           "  2️⃣ *3-Month Pay Plan* — Spread over 3 months\n"
+                           "  3️⃣ *6-Month Pay Plan* — Spread over 6 months\n\n"
+                           "✅ *Payment after delivery & installation*\n"
+                           "   (Supply & Fix — we deliver, install, then you pay)\n"
+                           "━━━━━━━━━━━━━━━━━━━━"
+                }
+            },
+            "transitions": [
                 {
                     "to_step": "ask_payment_preference",
-                    "priority": 2,
-                    "condition_config": {"type": "auto"}
+                    "condition_config": {"type": "auto"},
+                    "priority": 1
                 }
             ]
         },
@@ -297,13 +397,13 @@ INSTALLATION_SCHEDULING_FLOW = {
             },
             "transitions": [
                 {
-                    "to_step": "ask_system_size",
+                    "to_step": "ask_preferred_date",
                     "condition_config": {"type": "auto"},
                     "priority": 1
                 }
             ]
         },
-        # ── System size selection ──────────────────────────────────────
+        # ── System size selection (kept for WA path / direct entry) ───
         {
             "name": "ask_system_size",
             "type": "question",

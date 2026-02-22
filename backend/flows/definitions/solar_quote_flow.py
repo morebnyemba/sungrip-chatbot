@@ -91,7 +91,9 @@ SOLAR_QUOTE_FLOW = {
                 "wait_for": "whatsapp_flow_response"
             },
             "transitions": [
-                {                 "priority": 1,
+                {
+                    "to_step": "map_wa_quote_fields",
+                    "priority": 1,
                     "condition_config": {"type": "whatsapp_flow_response_received"}
                 }
             ]
@@ -122,7 +124,7 @@ SOLAR_QUOTE_FLOW = {
             "type": "question",
             "config": {
                 "message_config": {
-                 - "message_type": "interactive",
+                    "message_type": "interactive",
                     "interactive": {
                         "type": "button",
                         "body": {
