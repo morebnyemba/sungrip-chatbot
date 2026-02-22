@@ -227,7 +227,7 @@ class MetaCatalogService:
         params = {
             "fields": (
                 "id,retailer_id,name,description,price,currency,"
-                "availability,image_url,brand,url,category"
+                "availability,image_url,image_link,brand,url,category"
             ),
             "limit": 250,
         }
@@ -292,8 +292,15 @@ class MetaCatalogService:
                 currency = mp.get("currency", "USD")
                 availability = mp.get("availability", "in stock")
                 description = mp.get("description", "")
-                image_url = mp.get("image_url", "")
+                # Meta may return image as image_url, image_link, or nested
+                image_url = (
+                    mp.get("image_url", "")
+                    or mp.get("image_link", "")
+                    or mp.get("url", "")
+                )
                 brand = mp.get("brand", "")
+
+                logger.debug(f"Meta product raw data for '{name}': {mp}")
 
                 defaults = {
                     "name": name or retailer_id,
@@ -306,6 +313,7 @@ class MetaCatalogService:
                     "brand": brand,
                     "whatsapp_catalog_id": meta_id,
                     "is_active": availability == "in stock",
+                    "product_type": "solar_panel",  # default type; admin can adjust
                 }
 
                 product, created = Product.objects.update_or_create(
