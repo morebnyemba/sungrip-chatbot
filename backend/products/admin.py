@@ -59,7 +59,7 @@ class ProductAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
-    actions = ['reset_meta_sync', 'sync_to_meta_catalog']
+    actions = ['reset_meta_sync', 'sync_to_meta_catalog', 'import_from_meta_catalog']
 
     @admin.action(description="Reset Meta sync attempts (allow retry)")
     def reset_meta_sync(self, request, queryset):
@@ -79,6 +79,24 @@ class ProductAdmin(admin.ModelAdmin):
             except Exception as exc:
                 self.message_user(request, f"Error syncing {product.name}: {exc}", level='error')
         self.message_user(request, f"Successfully synced {success} product(s) to Meta Catalog.")
+
+    @admin.action(description="Import products FROM Meta Catalog (sync all)")
+    def import_from_meta_catalog(self, request, queryset):
+        from meta_integration.catalog_service import MetaCatalogService
+        service = MetaCatalogService()
+        try:
+            stats = service.import_products_from_catalog()
+            msg = (
+                f"Meta Catalog import complete — "
+                f"Created: {stats['created']}, Updated: {stats['updated']}, "
+                f"Skipped: {stats['skipped']}, Errors: {len(stats['errors'])}"
+            )
+            level = 'success' if not stats['errors'] else 'warning'
+            self.message_user(request, msg, level=level)
+            for err in stats['errors'][:10]:
+                self.message_user(request, f"Import error: {err}", level='error')
+        except Exception as exc:
+            self.message_user(request, f"Import failed: {exc}", level='error')
 
 
 @admin.register(SolarPackage)

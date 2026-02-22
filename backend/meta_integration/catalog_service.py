@@ -211,6 +211,127 @@ class MetaCatalogService:
         response.raise_for_status()
         return response.json()
 
+    def fetch_all_catalog_products(self):
+        """
+        Fetch ALL products from the Meta Catalog.
+
+        Uses the Graph API endpoint: GET /{catalog_id}/products
+        Handles pagination via cursors automatically.
+
+        Returns a list of product dicts from Meta.
+        """
+        if not self.catalog_id:
+            raise ValueError("WhatsApp Catalog ID is not configured.")
+
+        url = f"{self.base_url}/{self.catalog_id}/products"
+        params = {
+            "fields": (
+                "id,retailer_id,name,description,price,currency,"
+                "availability,image_url,brand,url,category"
+            ),
+            "limit": 250,
+        }
+
+        all_products = []
+        while url:
+            response = requests.get(
+                url, headers=self._get_headers(), params=params, timeout=60
+            )
+            response.raise_for_status()
+            data = response.json()
+            all_products.extend(data.get("data", []))
+
+            # Follow pagination cursor
+            paging = data.get("paging", {})
+            url = paging.get("next")
+            params = None  # next URL already includes query params
+
+        logger.info(
+            f"Fetched {len(all_products)} product(s) from Meta Catalog {self.catalog_id}"
+        )
+        return all_products
+
+    def import_products_from_catalog(self):
+        """
+        Import/sync products FROM Meta Catalog INTO the local database.
+
+        For each product in the catalog:
+        - If a local Product with matching SKU exists → update it
+        - If no local Product with that SKU → create a new one
+
+        Returns a dict with counts: {created, updated, skipped, errors}.
+        """
+        from products.models import Product
+
+        meta_products = self.fetch_all_catalog_products()
+        stats = {"created": 0, "updated": 0, "skipped": 0, "errors": []}
+
+        for mp in meta_products:
+            retailer_id = mp.get("retailer_id", "").strip()
+            meta_id = mp.get("id", "")
+            name = mp.get("name", "").strip()
+
+            if not retailer_id:
+                stats["skipped"] += 1
+                logger.warning(
+                    f"Skipping Meta product '{name}' (id={meta_id}): no retailer_id/SKU"
+                )
+                continue
+
+            try:
+                # Parse price: Meta returns price in cents as a string like "150000"
+                # or as "1500.00 USD". Handle both.
+                raw_price = mp.get("price", "0")
+                if isinstance(raw_price, str):
+                    raw_price = raw_price.split()[0].replace(",", "")
+                price_cents = int(float(raw_price))
+                # Meta stores price in cents; convert to dollars
+                selling_price = price_cents / 100 if price_cents > 100 else price_cents
+
+                currency = mp.get("currency", "USD")
+                availability = mp.get("availability", "in stock")
+                description = mp.get("description", "")
+                image_url = mp.get("image_url", "")
+                brand = mp.get("brand", "")
+
+                defaults = {
+                    "name": name or retailer_id,
+                    "short_description": description[:500] if description else "",
+                    "selling_price": selling_price,
+                    "cost_price": selling_price,  # default cost = selling; admin can adjust
+                    "currency": currency,
+                    "stock_quantity": 1 if availability == "in stock" else 0,
+                    "image_url": image_url,
+                    "brand": brand,
+                    "whatsapp_catalog_id": meta_id,
+                    "is_active": availability == "in stock",
+                }
+
+                product, created = Product.objects.update_or_create(
+                    sku=retailer_id,
+                    defaults=defaults,
+                )
+
+                if created:
+                    stats["created"] += 1
+                    logger.info(f"Created product from Meta: {name} (SKU: {retailer_id})")
+                else:
+                    stats["updated"] += 1
+                    logger.info(f"Updated product from Meta: {name} (SKU: {retailer_id})")
+
+            except Exception as exc:
+                stats["errors"].append(f"{name or retailer_id}: {exc}")
+                logger.error(
+                    f"Error importing Meta product '{name}' (SKU: {retailer_id}): {exc}"
+                )
+
+        logger.info(
+            f"Meta import complete — created: {stats['created']}, "
+            f"updated: {stats['updated']}, skipped: {stats['skipped']}, "
+            f"errors: {len(stats['errors'])}"
+        )
+        return stats
+
     def _handle_response(self, response, product, operation):
         """Handle Meta API response with detailed error logging."""
         try:
