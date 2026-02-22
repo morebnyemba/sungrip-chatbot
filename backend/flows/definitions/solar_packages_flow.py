@@ -108,11 +108,16 @@ SOLAR_PACKAGES_FLOW = {
                 "text": {
                     "body": "{{package_detail_text}}\n\n"
                            "━━━━━━━━━━━━━━━━━━━━\n"
+                           "� *3 Investment Options:*\n"
+                           "  1️⃣ *Cash Price* — Pay in full & save\n"
+                           "  2️⃣ *3-Month Pay Plan* — Spread over 3 months\n"
+                           "  3️⃣ *6-Month Pay Plan* — Spread over 6 months\n\n"
+                           "✅ *Payment after delivery & installation*\n"
+                           "   (Supply & Fix — we deliver, install, then you pay)\n\n"
                            "🛡️ *Warranty & Support:*\n"
                            "  • 25-Year Panel Warranty\n"
                            "  • 5-Year Inverter Warranty\n"
-                           "  • Lifetime Technical Support\n"
-                           "  • Payment after delivery & installation\n"
+                           "  • 1-Year After-Service Support\n"
                            "━━━━━━━━━━━━━━━━━━━━"
                 }
             },
@@ -132,15 +137,22 @@ SOLAR_PACKAGES_FLOW = {
                 "message_config": {
                     "message_type": "interactive",
                     "interactive": {
-                        "type": "button",
+                        "type": "list",
                         "body": {
                             "text": "What would you like to do next?"
                         },
                         "action": {
-                            "buttons": [
-                                {"type": "reply", "reply": {"id": "book_install", "title": "📅 Book Install"}},
-                                {"type": "reply", "reply": {"id": "view_another", "title": "🔄 View Another"}},
-                                {"type": "reply", "reply": {"id": "back_menu", "title": "🏠 Main Menu"}}
+                            "button": "Choose Option",
+                            "sections": [
+                                {
+                                    "title": "Next Steps",
+                                    "rows": [
+                                        {"id": "book_install", "title": "📅 Book Installation", "description": "Schedule delivery & installation for this package"},
+                                        {"id": "get_custom_quote", "title": "📋 Get a Quote", "description": "Need a customised system? We'll size one for you"},
+                                        {"id": "view_another", "title": "🔄 View Another Package", "description": "Browse more solar packages"},
+                                        {"id": "back_menu", "title": "🏠 Main Menu", "description": "Return to the main menu"}
+                                    ]
+                                }
                             ]
                         }
                     }
@@ -160,17 +172,25 @@ SOLAR_PACKAGES_FLOW = {
                     "priority": 1
                 },
                 {
+                    "to_step": "route_to_quote",
+                    "condition_config": {
+                        "type": "interactive_reply_id_equals",
+                        "value": "get_custom_quote"
+                    },
+                    "priority": 2
+                },
+                {
                     "to_step": "build_list",
                     "condition_config": {
                         "type": "interactive_reply_id_equals",
                         "value": "view_another"
                     },
-                    "priority": 2
+                    "priority": 3
                 },
                 {
                     "to_step": "thank_you",
                     "condition_config": {"type": "always_true"},
-                    "priority": 3
+                    "priority": 4
                 }
             ]
         },
@@ -238,6 +258,17 @@ SOLAR_PACKAGES_FLOW = {
                     "system_size": "{{system_size}}",
                     "payment_preference": "{{payment_preference}}"
                 }
+            },
+            "transitions": []
+        },
+        # ── Route to quote flow for customised systems ────────────────
+        {
+            "name": "route_to_quote",
+            "type": "switch_flow",
+            "config": {
+                "target_flow_name": "solar_quote_request",
+                "message": "No problem! Let's build you a custom solar system quote. 📋",
+                "initial_context_template": {}
             },
             "transitions": []
         },

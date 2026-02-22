@@ -192,27 +192,31 @@ SOLAR_QUOTE_FLOW = {
             },
             "transitions": [
                 {
-                    "to_step": "ask_monthly_bill",
+                    "to_step": "ask_gadgets",
                     "condition_config": {"type": "auto"},
                     "priority": 1
                 }
             ]
         },
         {
-            "name": "ask_monthly_bill",
+            "name": "ask_gadgets",
             "type": "question",
             "config": {
                 "message_config": {
                     "message_type": "text",
                     "text": {
-                        "body": "💰 What is your *average monthly electricity bill* in USD?\n\n"
-                               "_e.g. 150_"
+                        "body": "🔌 *Get a Quote*\n\n"
+                               "What gadgets and appliances do you want powered so we can "
+                               "recommend the right solar system for you?\n\n"
+                               "Please list them, for example:\n"
+                               "_TV, fridge, lights (6), laptop, microwave, borehole pump_\n\n"
+                               "💡 *Tip:* Include everything you'd like to run — the more detail, "
+                               "the more accurate your quote!"
                     }
                 },
                 "reply_config": {
-                    "expected_type": "number",
-                    "validation": {"min": 0, "max": 100000},
-                    "save_to_variable": "monthly_bill"
+                    "expected_type": "text",
+                    "save_to_variable": "gadgets_to_power"
                 }
             },
             "transitions": [
@@ -381,9 +385,9 @@ SOLAR_QUOTE_FLOW = {
                         "body": {
                             "text": "Hi {{customer_name}}, please confirm your quote request:\n\n"
                                    "━━━━━━━━━━━━━━━━━━━━\n"
-                                   "💰 *Monthly Bill:* ${{monthly_bill}}\n"
+                                   "� *Gadgets to Power:* {{gadgets_to_power}}\n"
                                    "🏠 *Roof Type:* {{roof_type}}\n"
-                                   "🏨️ *Property:* {{property_type}}\n"
+                                   "🏘️ *Property:* {{property_type}}\n"
                                    "📍 *Location:* {{location}}\n"
                                    "━━━━━━━━━━━━━━━━━━━━\n\n"
                                    "Tap *Confirm* to submit or *Edit* to start over."
@@ -462,11 +466,11 @@ SOLAR_QUOTE_FLOW = {
                 "text": {
                     "body": "✅ *Quote request submitted!*\n\n"
                            "Thank you, {{customer_name}}! Here's a summary:\n\n"
-                           "💰 Monthly bill: ${{monthly_bill}}\n"
+                           "� Gadgets: {{gadgets_to_power}}\n"
                            "🏠 Roof: {{roof_type}}\n"
                            "📍 Location: {{location}}\n\n"
-                           "Our solar consultant will contact you within "
-                           "*24 hours* with a detailed, personalised quote.\n\n"
+                           "Our solar consultant will review your requirements and contact you within "
+                           "*24 hours* with a personalised system recommendation & quote.\n\n"
                            "📞 Need it sooner? Call us at *+263 123 456 789*\n\n"
                            "Type *menu* to return to the main menu."
                 }

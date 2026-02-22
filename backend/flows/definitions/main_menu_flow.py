@@ -84,7 +84,7 @@ MAIN_MENU_FLOW = {
                                         {
                                             "id": "request_quote",
                                             "title": "📋 Get a Free Quote",
-                                            "description": "Receive a personalised quote in minutes"
+                                            "description": "Custom solar system? We'll size one just for you"
                                         },
                                         {
                                             "id": "schedule_installation",
