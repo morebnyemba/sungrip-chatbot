@@ -279,14 +279,15 @@ class MetaCatalogService:
                 continue
 
             try:
-                # Parse price: Meta returns price in cents as a string like "150000"
-                # or as "1500.00 USD". Handle both.
-                raw_price = mp.get("price", "0")
-                if isinstance(raw_price, str):
-                    raw_price = raw_price.split()[0].replace(",", "")
-                price_cents = int(float(raw_price))
-                # Meta stores price in cents; convert to dollars
-                selling_price = price_cents / 100 if price_cents > 100 else price_cents
+                # Parse price: Meta may return "$80.00", "8000", "80.00 USD", etc.
+                raw_price = str(mp.get("price", "0")).strip()
+                # Strip currency symbols and codes
+                import re
+                raw_price = re.sub(r'[^\d.]', '', raw_price.split()[0])
+                raw_price = raw_price or "0"
+                price_value = float(raw_price)
+                # If value looks like cents (>100 and no decimal), convert
+                selling_price = price_value / 100 if price_value > 0 and price_value == int(price_value) and price_value > 1000 else price_value
 
                 currency = mp.get("currency", "USD")
                 availability = mp.get("availability", "in stock")
