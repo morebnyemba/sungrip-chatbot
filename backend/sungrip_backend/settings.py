@@ -237,11 +237,20 @@ CELERY_TASK_TIME_LIMIT = 30 * 60
 # Django Channels — ASGI / WebSocket
 ASGI_APPLICATION = 'sungrip_backend.asgi.application'
 
+# Build the channel-layer Redis URL.
+# Prefer an explicit REDIS_URL env var; otherwise construct from REDIS_PASSWORD.
+_channels_redis_password = os.environ.get('REDIS_PASSWORD', '')
+_channels_redis_default = (
+    f'redis://:{_channels_redis_password}@redis:6379/1'
+    if _channels_redis_password
+    else 'redis://redis:6379/1'
+)
+
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            'hosts': [os.environ.get('REDIS_URL', 'redis://redis:6379/1')],
+            'hosts': [os.environ.get('REDIS_URL', _channels_redis_default)],
         },
     },
 }

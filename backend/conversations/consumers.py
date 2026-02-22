@@ -63,6 +63,7 @@ class ConversationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         user = self.scope.get('user')
         if not user or isinstance(user, AnonymousUser) or not user.is_authenticated:
+            logger.warning("WS rejected: unauthenticated user")
             await self.close(code=4001)
             return
 
@@ -72,10 +73,17 @@ class ConversationConsumer(AsyncWebsocketConsumer):
         # Verify contact exists
         contact = await self._get_contact(self.contact_id)
         if contact is None:
+            logger.warning(f"WS rejected: contact {self.contact_id} not found")
             await self.close(code=4004)
             return
 
-        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        try:
+            await self.channel_layer.group_add(self.group_name, self.channel_name)
+        except Exception as exc:
+            logger.error(f"WS channel layer group_add failed: {exc}")
+            await self.close(code=4500)
+            return
+
         await self.accept()
         logger.debug(f"WS connected: user={user} contact={self.contact_id}")
 
