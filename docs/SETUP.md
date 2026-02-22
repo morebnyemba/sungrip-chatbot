@@ -120,9 +120,9 @@ docker compose down -v
 
 ### Access Services
 
-- **Frontend**: https://zimgrow.shop (or http://localhost for local dev)
-- **Backend API**: https://api.zimgrow.shop/api (or http://localhost/api for local dev)
-- **Django Admin**: https://api.zimgrow.shop/admin (or http://localhost/admin for local dev)
+- **Frontend**: https://sungrip.slykertech.co.zw (or http://localhost for local dev)
+- **Backend API**: https://sungripapi.slykertech.co.zw/api (or http://localhost/api for local dev)
+- **Django Admin**: https://sungripapi.slykertech.co.zw/admin (or http://localhost/admin for local dev)
 - **Database**: localhost:5432
 - **Redis**: localhost:6379
 
@@ -147,7 +147,7 @@ From the WhatsApp Business API dashboard, collect:
 ### 3. Configure Webhook
 
 1. In the WhatsApp dashboard, go to Configuration
-2. Set Webhook URL: `https://api.zimgrow.shop/webhook/`
+2. Set Webhook URL: `https://sungripapi.slykertech.co.zw/webhook/`
 3. Set Verify Token: Use the same value as `WHATSAPP_VERIFY_TOKEN` in your `.env`
 4. Subscribe to `messages` events
 
@@ -165,7 +165,7 @@ WHATSAPP_VERIFY_TOKEN=your_custom_verify_token
 
 ```bash
 # Verify webhook is working
-curl -X GET "https://api.zimgrow.shop/webhook/?hub.mode=subscribe&hub.verify_token=your_verify_token&hub.challenge=test_challenge"
+curl -X GET "https://sungripapi.slykertech.co.zw/webhook/?hub.mode=subscribe&hub.verify_token=your_verify_token&hub.challenge=test_challenge"
 
 # Should return: test_challenge
 ```
@@ -189,7 +189,7 @@ CELERY_BROKER_URL=redis://:your_redis_password@redis:6379/0
 # Django
 SECRET_KEY=<generate-secret-key>  # Use: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
 DEBUG=False  # Set to True only in development
-ALLOWED_HOSTS=api.zimgrow.shop,zimgrow.shop
+ALLOWED_HOSTS=sungripapi.slykertech.co.zw,sungrip.slykertech.co.zw
 
 # WhatsApp
 WHATSAPP_PHONE_NUMBER_ID=<from-meta-dashboard>
@@ -210,7 +210,7 @@ EMAIL_HOST_USER=<your-email>
 EMAIL_HOST_PASSWORD=<your-app-password>
 
 # CORS
-CORS_ALLOWED_ORIGINS=https://zimgrow.shop
+CORS_ALLOWED_ORIGINS=https://sungrip.slykertech.co.zw
 ```
 
 ## Dependency Management
@@ -316,7 +316,7 @@ nano .env  # Edit with production values
 
 #### Option A: Let's Encrypt (Free, Recommended)
 
-Obtain SSL certificates for both `zimgrow.shop` (frontend) and `api.zimgrow.shop` (backend).
+Obtain SSL certificates for both `sungrip.slykertech.co.zw` (frontend) and `sungripapi.slykertech.co.zw` (backend).
 The `docker-compose.yml` bind-mounts the host's `/etc/letsencrypt` directory into the nginx
 container (read-only) and certbot container, so certificates obtained on the host are
 automatically available inside the containers.
@@ -329,16 +329,16 @@ sudo apt-get install -y certbot
 # Stop nginx temporarily so certbot can bind to port 80
 docker compose stop nginx
 
-# Generate certificate for the frontend domain (zimgrow.shop)
+# Generate certificate for the frontend domain (sungrip.slykertech.co.zw)
 sudo certbot certonly --standalone \
-  -d zimgrow.shop \
+  -d sungrip.slykertech.co.zw \
   --email your-email@example.com \
   --agree-tos \
   --no-eff-email
 
-# Generate certificate for the backend API domain (api.zimgrow.shop)
+# Generate certificate for the backend API domain (sungripapi.slykertech.co.zw)
 sudo certbot certonly --standalone \
-  -d api.zimgrow.shop \
+  -d sungripapi.slykertech.co.zw \
   --email your-email@example.com \
   --agree-tos \
   --no-eff-email
@@ -348,8 +348,8 @@ docker compose up -d nginx
 ```
 
 Certificates will be saved to:
-- `/etc/letsencrypt/live/zimgrow.shop/fullchain.pem` & `privkey.pem`
-- `/etc/letsencrypt/live/api.zimgrow.shop/fullchain.pem` & `privkey.pem`
+- `/etc/letsencrypt/live/sungrip.slykertech.co.zw/fullchain.pem` & `privkey.pem`
+- `/etc/letsencrypt/live/sungripapi.slykertech.co.zw/fullchain.pem` & `privkey.pem`
 
 #### Auto-Renewal
 
@@ -476,7 +476,7 @@ docker compose restart db
 
 1. **Verify webhook URL is accessible**:
    ```bash
-   curl https://api.zimgrow.shop/webhook/
+   curl https://sungripapi.slykertech.co.zw/webhook/
    ```
 
 2. **Check webhook logs**:

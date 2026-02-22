@@ -37,18 +37,18 @@ if not SECRET_KEY:
 
 ALLOWED_HOSTS = os.environ.get(
     'ALLOWED_HOSTS',
-    'localhost,127.0.0.1,api.zimgrow.shop,zimgrow.shop'
+    'localhost,127.0.0.1,sungripapi.slykertech.co.zw,sungrip.slykertech.co.zw'
 ).split(',')
 
 # Backend domain for constructing absolute URLs (e.g. product image URLs for Meta Catalog)
-# Set via BACKEND_DOMAIN env var in production (e.g. 'api.zimgrow.shop')
-BACKEND_DOMAIN = os.environ.get('BACKEND_DOMAIN', 'api.zimgrow.shop')
+# Set via BACKEND_DOMAIN env var in production (e.g. 'sungripapi.slykertech.co.zw')
+BACKEND_DOMAIN = os.environ.get('BACKEND_DOMAIN', 'sungripapi.slykertech.co.zw')
 
 # CSRF Configuration
 # Required for Django admin behind HTTPS reverse proxy
 CSRF_TRUSTED_ORIGINS = os.environ.get(
     'CSRF_TRUSTED_ORIGINS',
-    'http://localhost:8000,http://127.0.0.1:8000,https://api.zimgrow.shop,https://zimgrow.shop'
+    'http://localhost:8000,http://127.0.0.1:8000,https://sungripapi.slykertech.co.zw,https://sungrip.slykertech.co.zw'
 ).split(',')
 
 
@@ -221,7 +221,7 @@ SIMPLE_JWT = {
 }
 
 # CORS Configuration
-CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,https://zimgrow.shop,https://api.zimgrow.shop').split(',')
+CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,https://sungrip.slykertech.co.zw,https://sungripapi.slykertech.co.zw').split(',')
 CORS_ALLOW_CREDENTIALS = True
 
 # Celery Configuration

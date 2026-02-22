@@ -100,7 +100,7 @@ This document outlines security best practices and considerations for deploying 
 
 1. **Configure Allowed Origins**
    ```env
-   CORS_ALLOWED_ORIGINS=https://zimgrow.shop
+   CORS_ALLOWED_ORIGINS=https://sungrip.slykertech.co.zw
    ```
 
 2. **Never Use Wildcards in Production**
@@ -109,7 +109,7 @@ This document outlines security best practices and considerations for deploying 
    CORS_ALLOW_ALL_ORIGINS = True
    
    # RIGHT - Specify exact domains:
-   CORS_ALLOWED_ORIGINS = ['https://zimgrow.shop']
+   CORS_ALLOWED_ORIGINS = ['https://sungrip.slykertech.co.zw']
    ```
 
 ## WhatsApp Security
@@ -181,13 +181,13 @@ docker compose stop nginx
 
 # Generate certificate for frontend domain
 sudo certbot certonly --standalone \
-  -d zimgrow.shop \
+  -d sungrip.slykertech.co.zw \
   --email your-email@example.com \
   --agree-tos --no-eff-email
 
 # Generate certificate for backend API domain
 sudo certbot certonly --standalone \
-  -d api.zimgrow.shop \
+  -d sungripapi.slykertech.co.zw \
   --email your-email@example.com \
   --agree-tos --no-eff-email
 
@@ -195,15 +195,15 @@ sudo certbot certonly --standalone \
 docker compose up -d nginx
 
 # Certificates saved to:
-# /etc/letsencrypt/live/zimgrow.shop/
-# /etc/letsencrypt/live/api.zimgrow.shop/
+# /etc/letsencrypt/live/sungrip.slykertech.co.zw/
+# /etc/letsencrypt/live/sungripapi.slykertech.co.zw/
 ```
 
 ### Nginx SSL Configuration
 
 The `nginx_proxy/nginx.conf` is already configured with separate server blocks:
-- `zimgrow.shop` — serves the React frontend
-- `api.zimgrow.shop` — serves the Django backend API, admin panel, and webhook
+- `sungrip.slykertech.co.zw` — serves the React frontend
+- `sungripapi.slykertech.co.zw` — serves the Django backend API, admin panel, and webhook
 
 See `nginx_proxy/nginx.conf` for the full configuration.
 

@@ -33,8 +33,8 @@ class CorsOriginValidator:
     Django's CORS_ALLOWED_ORIGINS and ALLOWED_HOSTS.
 
     AllowedHostsOriginValidator only checks ALLOWED_HOSTS, which may not
-    include the frontend domain (e.g. zimgrow.shop) when the API lives on a
-    separate subdomain (api.zimgrow.shop).
+    include the frontend domain (e.g. sungrip.slykertech.co.zw) when the API lives on a
+    separate subdomain (sungripapi.slykertech.co.zw).
     """
 
     def __init__(self, application):
@@ -58,7 +58,7 @@ class CorsOriginValidator:
         parsed = urlparse(origin)
         origin_host = parsed.hostname or ""
 
-        # Check CORS_ALLOWED_ORIGINS (full URLs like "https://zimgrow.shop")
+        # Check CORS_ALLOWED_ORIGINS (full URLs like "https://sungrip.slykertech.co.zw")
         cors_origins = getattr(settings, "CORS_ALLOWED_ORIGINS", [])
         if origin in cors_origins:
             return True

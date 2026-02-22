@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.zimgrow.shop';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://sungripapi.slykertech.co.zw';
 const AUTH_ERROR_EVENT = 'auth-error';
 
 // Token keys — must match the keys used in services/auth.js and atoms/authAtoms.js

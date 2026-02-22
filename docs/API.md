@@ -3,7 +3,7 @@
 ## Base URL
 ```
 Development: http://localhost:8000/api
-Production: https://api.zimgrow.shop/api
+Production: https://sungripapi.slykertech.co.zw/api
 ```
 
 ## Authentication
