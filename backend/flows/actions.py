@@ -730,7 +730,7 @@ def build_packages_interactive_list(contact, context: dict, params: dict) -> dic
         # Always add a "Get a Quote" option so users can request
         # a custom system quote instead of picking a fixed package.
         sections.append({
-            'title': '📋 Need Something Different?',
+            'title': '📋 Something Else?',
             'rows': [{
                 'id': 'get_quote',
                 'title': '📋 Get a Quote',
