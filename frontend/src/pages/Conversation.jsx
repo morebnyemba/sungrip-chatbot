@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAtom } from 'jotai';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from 'sonner';
 import {
@@ -37,9 +36,9 @@ const MessageBubble = ({ message, isLast }) => {
 
   return (
     <div className={`flex flex-col my-1.5 ${isOutgoing ? 'items-end' : 'items-start'}`}>
-      <div className={`max-w-[85%] px-3 py-2 rounded-xl shadow-sm ${bubbleClass}`}>
-        <div className="text-sm break-words">
-          {message.text_content ? <p>{message.text_content}</p> : <p className="italic text-muted-foreground/80">{message.content_preview || '[Unsupported message type]'}</p>}
+      <div className={`max-w-[85%] sm:max-w-[75%] px-3 py-2 rounded-xl shadow-sm ${bubbleClass}`}>
+        <div className="text-sm break-words whitespace-pre-wrap overflow-hidden">
+          {message.text_content ? <p className="leading-relaxed">{message.text_content}</p> : <p className="italic text-muted-foreground/80">{message.content_preview || '[Unsupported message type]'}</p>}
         </div>
       </div>
       <div className={`flex items-center gap-1 mt-1 px-1 ${isOutgoing ? 'flex-row-reverse' : ''}`}>
@@ -90,7 +89,10 @@ export default function ConversationsPage() {
   const [isLoading, setIsLoading] = useState({ contacts: true, messages: false });
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm] = useDebounce(searchTerm, 300);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const inputRef = useRef(null);
   const { accessToken } = useAuth();
 
@@ -118,28 +120,55 @@ export default function ConversationsPage() {
     }
   }, []);
 
-  const fetchMessages = useCallback(async (contactId) => {
+  const fetchMessages = useCallback(async (contactId, beforeId = null) => {
     if (!contactId) return;
-    setIsLoading(prev => ({ ...prev, messages: true }));
+    if (beforeId) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(prev => ({ ...prev, messages: true }));
+    }
     try {
-      const response = await contactsApi.listMessages(contactId);
+      const params = { limit: 50 };
+      if (beforeId) params.before = beforeId;
+      const response = await contactsApi.listMessages(contactId, params);
       const data = response.data;
-      setMessages((data.results || data || []).reverse());
+      const results = (data.results || data || []).reverse();
+      setHasMoreMessages(!!data.has_more);
+      if (beforeId) {
+        setMessages(prev => [...results, ...prev]);
+      } else {
+        setMessages(results);
+      }
     } catch (error) {
       toast.error("Couldn't load messages");
     } finally {
-      setIsLoading(prev => ({ ...prev, messages: false }));
+      if (beforeId) {
+        setIsLoadingMore(false);
+      } else {
+        setIsLoading(prev => ({ ...prev, messages: false }));
+      }
     }
   }, []);
+
+  const loadOlderMessages = useCallback(() => {
+    if (!selectedContact || !hasMoreMessages || isLoadingMore) return;
+    const oldestMsg = messages[0];
+    if (oldestMsg) {
+      fetchMessages(selectedContact.id, oldestMsg.id);
+    }
+  }, [selectedContact, hasMoreMessages, isLoadingMore, messages, fetchMessages]);
 
   useEffect(() => { fetchContacts(debouncedSearchTerm); }, [debouncedSearchTerm, fetchContacts]);
 
   useEffect(() => {
     if (selectedContact) {
+      setMessages([]);
+      setHasMoreMessages(false);
       fetchMessages(selectedContact.id);
       inputRef.current?.focus();
     } else {
       setMessages([]);
+      setHasMoreMessages(false);
     }
   }, [selectedContact, fetchMessages]);
 
@@ -147,18 +176,39 @@ export default function ConversationsPage() {
     if (!lastJsonMessage) return;
     const { type, message, contact: updatedContactData } = lastJsonMessage;
     if (type === 'new_message' && message) {
-      setMessages(prev => {
-        const idx = prev.findIndex(msg => msg.id === message.id);
-        if (idx !== -1) { const updated = [...prev]; updated[idx] = message; return updated; }
-        return [...prev, message];
-      });
-    } else if (type === 'contact_updated' && updatedContactData && selectedContact?.id === updatedContactData.id) {
-      setSelectedContact(updatedContactData);
+      // Append or update the message in the current chat
+      if (selectedContact && message.contact === selectedContact.id) {
+        setMessages(prev => {
+          const idx = prev.findIndex(msg => msg.id === message.id);
+          if (idx !== -1) { const updated = [...prev]; updated[idx] = message; return updated; }
+          return [...prev, message];
+        });
+      }
+      // Update the contact's last_message_date and preview so sorting stays correct
+      setContacts(prev => prev.map(c => {
+        if (c.id === message.contact) {
+          return { ...c, last_message_date: message.timestamp, last_message_preview: message.text_content || message.content_preview || c.last_message_preview };
+        }
+        return c;
+      }));
+    } else if (type === 'contact_updated' && updatedContactData) {
       setContacts(prev => prev.map(c => c.id === updatedContactData.id ? { ...c, ...updatedContactData } : c));
+      if (selectedContact?.id === updatedContactData.id) {
+        setSelectedContact(updatedContactData);
+      }
     }
-  }, [lastJsonMessage, selectedContact?.id, setSelectedContact]);
+  }, [lastJsonMessage, selectedContact, setSelectedContact]);
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  // Auto-scroll to bottom only when new messages arrive at the end (not when loading older)
+  const prevMsgCountRef = useRef(0);
+  useEffect(() => {
+    const prevCount = prevMsgCountRef.current;
+    prevMsgCountRef.current = messages.length;
+    // Scroll to bottom on initial load or when a new message is appended
+    if (prevCount === 0 || messages.length - prevCount <= 2) {
+      messagesEndRef.current?.scrollIntoView({ behavior: prevCount === 0 ? 'instant' : 'smooth' });
+    }
+  }, [messages]);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -198,37 +248,44 @@ export default function ConversationsPage() {
     [ReadyState.UNINSTANTIATED]: { text: 'Offline', color: 'text-gray-500', bgColor: 'bg-gray-500' },
   }[readyState];
 
+  // Sort contacts by latest message date (most recent first)
+  const sortedContacts = useMemo(() => {
+    return [...contacts].sort((a, b) => {
+      const dateA = a.last_message_date ? new Date(a.last_message_date) : new Date(0);
+      const dateB = b.last_message_date ? new Date(b.last_message_date) : new Date(0);
+      return dateB - dateA;
+    });
+  }, [contacts]);
+
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden rounded-xl border bg-background shadow-sm">
       {/* Contacts Panel */}
       <div className={`${selectedContact ? 'hidden md:flex md:w-96' : 'flex w-full'} border-r flex-col bg-background transition-all duration-300 h-full`}>
-        <div className="p-3 border-b sticky top-0 bg-background z-10">
+        <div className="p-3 border-b shrink-0 bg-background z-10">
           <div className="relative">
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search contacts..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
         </div>
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <ScrollArea className="h-full">
-            {isLoading.contacts ? (
-              <div className="space-y-2 p-4">{[...Array(5)].map((_, i) => (
-                <div key={i} className="flex items-center gap-3 p-3">
-                  <div className="h-10 w-10 rounded-full bg-muted animate-pulse" />
-                  <div className="flex-1 space-y-2"><div className="h-4 w-3/4 bg-muted rounded animate-pulse" /><div className="h-3 w-1/2 bg-muted rounded animate-pulse" /></div>
-                </div>
-              ))}</div>
-            ) : contacts.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                <FiUsers className="h-12 w-12 mb-4 text-muted-foreground/30" />
-                <p className="text-muted-foreground">No contacts found</p>
-                <p className="text-sm text-muted-foreground/70 mt-1">{searchTerm ? 'Try a different search' : 'Contacts will appear once messages are received'}</p>
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {isLoading.contacts ? (
+            <div className="space-y-2 p-4">{[...Array(5)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 p-3">
+                <div className="h-10 w-10 rounded-full bg-muted animate-pulse" />
+                <div className="flex-1 space-y-2"><div className="h-4 w-3/4 bg-muted rounded animate-pulse" /><div className="h-3 w-1/2 bg-muted rounded animate-pulse" /></div>
               </div>
-            ) : (
-              contacts.map(contact => (
-                <ContactListItem key={contact.id} contact={contact} isSelected={selectedContact?.id === contact.id} onSelect={setSelectedContact} hasUnread={contact.unread_count > 0} />
-              ))
-            )}
-          </ScrollArea>
+            ))}</div>
+          ) : sortedContacts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+              <FiUsers className="h-12 w-12 mb-4 text-muted-foreground/30" />
+              <p className="text-muted-foreground">No contacts found</p>
+              <p className="text-sm text-muted-foreground/70 mt-1">{searchTerm ? 'Try a different search' : 'Contacts will appear once messages are received'}</p>
+            </div>
+          ) : (
+            sortedContacts.map(contact => (
+              <ContactListItem key={contact.id} contact={contact} isSelected={selectedContact?.id === contact.id} onSelect={setSelectedContact} hasUnread={contact.unread_count > 0} />
+            ))
+          )}
         </div>
       </div>
 
@@ -308,7 +365,7 @@ export default function ConversationsPage() {
             </div>
           )}
 
-          <div className="flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-y-auto" ref={messagesContainerRef}>
             {isLoading.messages ? (
               <div className="flex justify-center items-center h-full"><FiLoader className="animate-spin h-6 w-6 text-muted-foreground" /></div>
             ) : messages.length === 0 ? (
@@ -318,12 +375,17 @@ export default function ConversationsPage() {
                 <p className="text-sm mt-1">Send your first message to {selectedContact.name || 'this contact'}</p>
               </div>
             ) : (
-              <ScrollArea className="h-full p-4">
-                <div className="space-y-3">
-                  {messages.map((msg, i) => (<MessageBubble key={msg.id} message={msg} isLast={i === messages.length - 1} />))}
-                  <div ref={messagesEndRef} />
-                </div>
-              </ScrollArea>
+              <div className="p-4 space-y-3">
+                {hasMoreMessages && (
+                  <div className="flex justify-center py-2">
+                    <Button variant="ghost" size="sm" onClick={loadOlderMessages} disabled={isLoadingMore} className="text-xs text-muted-foreground">
+                      {isLoadingMore ? <><FiLoader className="animate-spin h-3 w-3 mr-2" />Loading...</> : 'Load older messages'}
+                    </Button>
+                  </div>
+                )}
+                {messages.map((msg, i) => (<MessageBubble key={msg.id} message={msg} isLast={i === messages.length - 1} />))}
+                <div ref={messagesEndRef} />
+              </div>
             )}
           </div>
 

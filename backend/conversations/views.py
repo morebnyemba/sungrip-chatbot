@@ -57,16 +57,35 @@ class ContactViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'], url_path='messages')
     def messages(self, request, pk=None):
-        """Return the message history for a contact"""
+        """Return the message history for a contact with cursor pagination."""
         contact = self.get_object()
-        msgs = (
+        qs = (
             Message.objects
             .filter(contact=contact)
             .select_related('replied_to')
-            .order_by('-timestamp')[:100]
+            .order_by('-timestamp')
         )
+
+        # Cursor-style pagination: ?before=<message_id>&limit=<N>
+        before_id = request.query_params.get('before')
+        limit = min(int(request.query_params.get('limit', 50)), 200)
+
+        if before_id:
+            try:
+                cursor_msg = Message.objects.get(pk=before_id, contact=contact)
+                qs = qs.filter(timestamp__lt=cursor_msg.timestamp)
+            except Message.DoesNotExist:
+                pass
+
+        msgs = list(qs[:limit + 1])  # fetch one extra to check has_more
+        has_more = len(msgs) > limit
+        msgs = msgs[:limit]
+
         serializer = MessageSerializer(msgs, many=True)
-        return Response(serializer.data)
+        return Response({
+            'results': serializer.data,
+            'has_more': has_more,
+        })
 
     @action(detail=True, methods=['post'], url_path='toggle-intervention')
     def toggle_intervention(self, request, pk=None):

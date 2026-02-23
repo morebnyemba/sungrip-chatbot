@@ -76,6 +76,7 @@ services:
     environment:
       - DJANGO_SETTINGS_MODULE=sungrip_backend.settings
       - PYTHONUNBUFFERED=1
+      - DJANGO_ALLOW_ASYNC_UNSAFE=true
     depends_on:
       db:
         condition: service_healthy

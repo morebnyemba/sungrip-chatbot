@@ -91,8 +91,8 @@ export const contactsApi = {
   toggleIntervention(id) {
     return apiClient.post(`/api/conversations/contacts/${id}/toggle-intervention/`);
   },
-  listMessages(contactId) {
-    return apiClient.get(`/api/conversations/contacts/${contactId}/messages/`);
+  listMessages(contactId, params = {}) {
+    return apiClient.get(`/api/conversations/contacts/${contactId}/messages/`, { params });
   },
   sendMessage(contactId, text) {
     return apiClient.post(`/api/conversations/contacts/${contactId}/send-message/`, { message: text });
