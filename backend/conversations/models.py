@@ -50,6 +50,13 @@ class Contact(models.Model):
             self.profile_name = self.name
         super().save(*args, **kwargs)
 
+    def update_last_message(self, preview_text, timestamp=None):
+        """Update contact summary fields after any message (inbound or outbound)."""
+        from django.utils import timezone as tz
+        self.last_message_date = timestamp or tz.now()
+        self.last_message_preview = (preview_text or '')[:255]
+        self.save(update_fields=['last_message_date', 'last_message_preview'])
+
 
 
 class Conversation(models.Model):

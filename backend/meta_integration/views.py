@@ -494,6 +494,12 @@ class MetaWebhookAPIView(View):
         else:
             logger.info(f"Saved incoming message (WAMID: {whatsapp_message_id}) as DB ID {incoming_msg_obj.id}")
 
+        # Update contact's last_message_date so the contacts list is sorted correctly
+        contact.update_last_message(
+            preview_text=incoming_msg_obj.content or '',
+            timestamp=message_timestamp,
+        )
+
         # Broadcast inbound message to WebSocket subscribers in real time
         try:
             from conversations.consumers import broadcast_message_to_websocket
@@ -594,6 +600,12 @@ class MetaWebhookAPIView(View):
                 'status': 'received',
                 'status_timestamp': message_timestamp,
             },
+        )
+
+        # Update contact's last_message_date so the contacts list is sorted correctly
+        contact.update_last_message(
+            preview_text=content_text,
+            timestamp=message_timestamp,
         )
 
         # Process the order (creates DB records)
@@ -708,6 +720,12 @@ class MetaWebhookAPIView(View):
         if log_entry and log_entry.pk:
             log_entry.message = incoming_msg_obj
             log_entry.save(update_fields=['message'])
+
+        # Update contact's last_message_date so the contacts list is sorted correctly
+        contact.update_last_message(
+            preview_text='[WhatsApp Flow Response]',
+            timestamp=message_timestamp,
+        )
 
         # Process flow response context
         success, notes = process_whatsapp_flow_response(msg_data, contact, active_config)

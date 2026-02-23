@@ -148,9 +148,7 @@ class ContactViewSet(viewsets.ModelViewSet):
         conversation.save(update_fields=['last_message_at'])
 
         # Update contact summary fields
-        contact.last_message_date = now
-        contact.last_message_preview = text[:255]
-        contact.save(update_fields=['last_message_date', 'last_message_preview'])
+        contact.update_last_message(preview_text=text, timestamp=now)
 
         return Response(MessageSerializer(msg).data, status=status.HTTP_201_CREATED)
 

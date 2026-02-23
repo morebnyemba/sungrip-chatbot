@@ -200,3 +200,9 @@ class ConversationConsumer(AsyncWebsocketConsumer):
 
         # Broadcast new message to all subscribers of this conversation
         broadcast_message_to_websocket(msg)
+
+        # Update contact's last_message_date for contacts list ordering
+        contact.update_last_message(
+            preview_text=text,
+            timestamp=msg.timestamp,
+        )
