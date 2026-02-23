@@ -188,7 +188,7 @@ class Message(models.Model):
 class MessageTemplate(models.Model):
     """WhatsApp message templates"""
     
-    name = models.CharField(max_length=200, unique=True)
+    name = models.CharField(max_length=200, db_index=True)
     language = models.CharField(max_length=10, default='en')
     category = models.CharField(
         max_length=50,
@@ -236,6 +236,7 @@ class MessageTemplate(models.Model):
     
     class Meta:
         ordering = ['name']
+        unique_together = [('name', 'language')]
         verbose_name = 'Message Template'
         verbose_name_plural = 'Message Templates'
     

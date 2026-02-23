@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.contrib import messages as django_messages
+
 from .models import Notification, NotificationTemplate
 
 
@@ -71,3 +73,31 @@ class NotificationTemplateAdmin(admin.ModelAdmin):
             'fields': ('created_at', 'updated_at'),
         }),
     )
+
+    actions = ['sync_templates_from_meta']
+
+    @admin.action(description="\u2b07\ufe0f Sync notification templates from Meta")
+    def sync_templates_from_meta(self, request, queryset):
+        """Import / update notification templates from Meta WABA."""
+        from meta_integration.template_service import MetaTemplateService
+
+        try:
+            svc = MetaTemplateService()
+            stats = svc.sync_notification_templates()
+
+            msg = (
+                f"Meta notification template sync complete \u2014 "
+                f"Created: {stats['created']}, Updated: {stats['updated']}, "
+                f"Skipped: {stats['skipped']}"
+            )
+            if stats['errors']:
+                msg += f", Errors: {len(stats['errors'])}"
+                for err in stats['errors'][:5]:
+                    self.message_user(request, f"\u26a0\ufe0f {err}", django_messages.WARNING)
+
+            self.message_user(request, msg, django_messages.SUCCESS)
+
+        except Exception as exc:
+            self.message_user(
+                request, f"\u274c Sync failed: {exc}", django_messages.ERROR
+            )
