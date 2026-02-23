@@ -123,7 +123,7 @@ INSTALLATION_SCHEDULING_FLOW = {
                     }
                 },
                 {
-                    "to_step": "wa_ask_payment",
+                    "to_step": "build_packages_list",
                     "priority": 2,
                     "condition_config": {"type": "auto"}
                 }
@@ -359,9 +359,17 @@ INSTALLATION_SCHEDULING_FLOW = {
             },
             "transitions": [
                 {
+                    "to_step": "wa_ask_location_pin",
+                    "priority": 1,
+                    "condition_config": {
+                        "type": "variable_exists",
+                        "variable_name": "whatsapp_flow_response_received"
+                    }
+                },
+                {
                     "to_step": "ask_preferred_date",
                     "condition_config": {"type": "auto"},
-                    "priority": 1
+                    "priority": 2
                 }
             ]
         },
