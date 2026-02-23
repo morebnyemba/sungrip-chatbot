@@ -1333,3 +1333,37 @@ def save_delivery_info(contact, context: dict, params: dict) -> dict:
         f"recipient={recipient_name}, address={delivery_address}"
     )
     return context
+
+
+# ---------------------------------------------------------------------------
+#  Save language preference  (language_selection flow)
+# ---------------------------------------------------------------------------
+
+@register_flow_action('save_language_preference')
+def save_language_preference(contact, context: dict, params: dict) -> dict:
+    """
+    Persist the user's language choice on the Contact record.
+
+    Called by the ``language_selection`` flow after the user picks
+    English or Shona.
+
+    Expected params:
+        language – 'en' or 'sn'
+    """
+    language = params.get('language', 'en')
+    valid_choices = {code for code, _label in contact.LANGUAGE_CHOICES}
+    if language not in valid_choices:
+        logger.warning(
+            f"save_language_preference: Invalid language '{language}' "
+            f"for {contact.phone_number}. Defaulting to 'en'."
+        )
+        language = 'en'
+
+    contact.preferred_language = language
+    contact.save(update_fields=['preferred_language'])
+
+    logger.info(
+        f"save_language_preference: Set language='{language}' "
+        f"for {contact.phone_number}"
+    )
+    return context

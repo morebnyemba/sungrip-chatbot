@@ -17,6 +17,13 @@ from flows.definitions.installation_scheduling_flow import INSTALLATION_SCHEDULI
 from flows.definitions.solar_packages_flow import SOLAR_PACKAGES_FLOW
 from flows.definitions.contact_support_flow import CONTACT_SUPPORT_FLOW
 from flows.definitions.order_delivery_info_flow import ORDER_DELIVERY_INFO_FLOW
+from flows.definitions.language_selection_flow import LANGUAGE_SELECTION_FLOW
+from flows.definitions.main_menu_flow_sn import MAIN_MENU_FLOW_SN
+from flows.definitions.solar_packages_flow_sn import SOLAR_PACKAGES_FLOW_SN
+from flows.definitions.solar_quote_flow_sn import SOLAR_QUOTE_FLOW_SN
+from flows.definitions.installation_scheduling_flow_sn import INSTALLATION_SCHEDULING_FLOW_SN
+from flows.definitions.contact_support_flow_sn import CONTACT_SUPPORT_FLOW_SN
+from flows.definitions.order_delivery_info_flow_sn import ORDER_DELIVERY_INFO_FLOW_SN
 
 
 class Command(BaseCommand):
@@ -29,12 +36,22 @@ class Command(BaseCommand):
         # List of flow definitions to load
         # Main menu should be loaded first as it's the entry point
         flow_definitions = [
+            # English flows
             MAIN_MENU_FLOW,
             SOLAR_QUOTE_FLOW,
             INSTALLATION_SCHEDULING_FLOW,
             SOLAR_PACKAGES_FLOW,
             CONTACT_SUPPORT_FLOW,
             ORDER_DELIVERY_INFO_FLOW,
+            # Language selection (bilingual)
+            LANGUAGE_SELECTION_FLOW,
+            # Shona flows
+            MAIN_MENU_FLOW_SN,
+            SOLAR_PACKAGES_FLOW_SN,
+            SOLAR_QUOTE_FLOW_SN,
+            INSTALLATION_SCHEDULING_FLOW_SN,
+            CONTACT_SUPPORT_FLOW_SN,
+            ORDER_DELIVERY_INFO_FLOW_SN,
         ]
 
         for flow_def in flow_definitions:
