@@ -213,13 +213,21 @@ export default function ConversationsPage() {
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedContact) return;
+    const msgText = newMessage.trim();
+    // Immediately bump the contact to the top of the list
+    const now = new Date().toISOString();
+    setContacts(prev => prev.map(c =>
+      c.id === selectedContact.id
+        ? { ...c, last_message_date: now, last_message_preview: msgText }
+        : c
+    ));
     if (readyState === ReadyState.OPEN) {
-      sendJsonMessage({ type: 'send_message', message: newMessage.trim() });
+      sendJsonMessage({ type: 'send_message', message: msgText });
       setNewMessage('');
     } else {
       // REST API fallback when WebSocket is not connected
       try {
-        const res = await contactsApi.sendMessage(selectedContact.id, newMessage.trim());
+        const res = await contactsApi.sendMessage(selectedContact.id, msgText);
         setMessages(prev => [...prev, res.data]);
         setNewMessage('');
       } catch {
@@ -291,10 +299,10 @@ export default function ConversationsPage() {
 
       {/* Messages Panel */}
       {selectedContact ? (
-        <div className="flex-1 flex flex-col bg-background h-full">
-          <div className="p-3 border-b flex items-center justify-between sticky top-0 bg-background z-10">
+        <div className="flex-1 flex flex-col bg-background h-full min-h-0">
+          <div className="p-3 border-b flex items-center justify-between shrink-0 bg-background z-10">
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" onClick={() => setSelectedContact(null)} className="md:hidden"><FiArrowLeft className="h-5 w-5" /></Button>
+              <Button variant="ghost" size="icon" onClick={() => { setSelectedContact(null); fetchContacts(debouncedSearchTerm); }} className="md:hidden"><FiArrowLeft className="h-5 w-5" /></Button>
               <Avatar>
                 <AvatarImage src={`https://ui-avatars.com/api/?name=${encodeURIComponent(selectedContact.name || selectedContact.whatsapp_id)}`} />
                 <AvatarFallback>{selectedContact.name?.substring(0, 2) || 'CN'}</AvatarFallback>
@@ -356,7 +364,7 @@ export default function ConversationsPage() {
           </div>
 
           {selectedContact.needs_human_intervention && (
-            <div className="bg-yellow-100 dark:bg-yellow-900/30 border-b border-yellow-300 dark:border-yellow-700 p-2 flex items-center justify-between gap-4 text-sm">
+            <div className="bg-yellow-100 dark:bg-yellow-900/30 border-b border-yellow-300 dark:border-yellow-700 p-2 flex items-center justify-between gap-4 text-sm shrink-0">
               <div className="flex items-center gap-2">
                 <FiAlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
                 <p className="font-medium text-yellow-800 dark:text-yellow-200">Automated responses are paused.</p>
@@ -389,7 +397,7 @@ export default function ConversationsPage() {
             )}
           </div>
 
-          <div className="p-3 border-t bg-background sticky bottom-0">
+          <div className="p-3 border-t bg-background shrink-0">
             <form onSubmit={handleSendMessage} className="flex items-end gap-2">
               <Button type="button" variant="ghost" size="icon" className="text-muted-foreground" onClick={() => toast.info('File attachments coming soon.')}><FiPaperclip className="h-5 w-5" /></Button>
               <Textarea ref={inputRef} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} onKeyDown={handleKeyDown} placeholder="Type a message..." rows={1} className="flex-1 py-3 min-h-[44px] max-h-[120px] overflow-y-auto resize-none" />

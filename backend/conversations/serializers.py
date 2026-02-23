@@ -14,7 +14,7 @@ class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = [
-            'id', 'message_id', 'direction', 'message_type',
+            'id', 'contact', 'message_id', 'direction', 'message_type',
             'content', 'text_content', 'content_preview',
             'media_url', 'caption', 'location_latitude', 'location_longitude',
             'location_name', 'location_address', 'interactive_data',
