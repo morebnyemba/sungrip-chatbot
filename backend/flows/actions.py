@@ -727,6 +727,17 @@ def build_packages_interactive_list(contact, context: dict, params: dict) -> dic
                 'rows': plan_6mo_rows
             })
 
+        # Always add a "Get a Quote" option so users can request
+        # a custom system quote instead of picking a fixed package.
+        sections.append({
+            'title': '📋 Need Something Different?',
+            'rows': [{
+                'id': 'get_quote',
+                'title': '📋 Get a Quote',
+                'description': 'Request a custom solar system quote'
+            }]
+        })
+
         context['_packages_list_msg'] = {
             'message_type': 'interactive',
             'interactive': {

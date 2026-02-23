@@ -63,9 +63,17 @@ SOLAR_PACKAGES_FLOW = {
             },
             "transitions": [
                 {
+                    "to_step": "route_to_quote",
+                    "condition_config": {
+                        "type": "interactive_reply_id_equals",
+                        "value": "get_quote"
+                    },
+                    "priority": 1
+                },
+                {
                     "to_step": "load_details",
                     "condition_config": {"type": "auto"},
-                    "priority": 1
+                    "priority": 2
                 }
             ]
         },

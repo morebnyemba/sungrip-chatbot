@@ -303,9 +303,17 @@ INSTALLATION_SCHEDULING_FLOW = {
             },
             "transitions": [
                 {
+                    "to_step": "route_to_quote",
+                    "condition_config": {
+                        "type": "interactive_reply_id_equals",
+                        "value": "get_quote"
+                    },
+                    "priority": 1
+                },
+                {
                     "to_step": "load_package_details",
                     "condition_config": {"type": "auto"},
-                    "priority": 1
+                    "priority": 2
                 }
             ]
         },
@@ -676,6 +684,17 @@ INSTALLATION_SCHEDULING_FLOW = {
                     "priority": 1
                 }
             ]
+        },
+        # ── Route to quote flow ────────────────────────────────────
+        {
+            "name": "route_to_quote",
+            "type": "switch_flow",
+            "config": {
+                "target_flow_name": "solar_quote_request",
+                "message": "No problem! Let's build you a custom solar system quote. 📋",
+                "initial_context_template": {}
+            },
+            "transitions": []
         },
         {
             "name": "end_cancelled",
