@@ -43,7 +43,7 @@ PACKAGES = [
         "equipment_summary": [
             "4 × 450-585W Solar Panels",
             "100Ah 24V Lithium Battery",
-            "3.2 kVA Hybrid Inverter",
+            "3.5 kVA Hybrid Inverter",
         ],
         "powers": [
             "Fridge",
