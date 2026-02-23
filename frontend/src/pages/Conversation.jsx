@@ -71,9 +71,15 @@ const ContactListItem = React.memo(({ contact, isSelected, onSelect, hasUnread }
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <p className="font-medium truncate">{contact.name || contact.whatsapp_id}</p>
-            {contact.needs_human_intervention && <FiAlertCircle title="Needs Human Intervention" className="h-4 w-4 text-red-500 flex-shrink-0" />}
+            {contact.needs_human_intervention && <FiAlertCircle title="Needs Human Intervention" className="h-4 w-4 text-red-500 shrink-0" />}
           </div>
-          <FiChevronRight className="h-4 w-4 text-muted-foreground" />
+          {contact.last_message_date ? (
+            <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">
+              {formatDistanceToNow(parseISO(contact.last_message_date), { addSuffix: true })}
+            </span>
+          ) : (
+            <FiChevronRight className="h-4 w-4 text-muted-foreground" />
+          )}
         </div>
         <p className="text-xs text-muted-foreground truncate">{contact.last_message_preview || 'No messages yet'}</p>
       </div>
@@ -107,16 +113,16 @@ export default function ConversationsPage() {
     shouldReconnect: () => true,
   });
 
-  const fetchContacts = useCallback(async (search = '') => {
-    setIsLoading(prev => ({ ...prev, contacts: true }));
+  const fetchContacts = useCallback(async (search = '', silent = false) => {
+    if (!silent) setIsLoading(prev => ({ ...prev, contacts: true }));
     try {
       const response = await contactsApi.list({ search });
       const data = response.data;
       setContacts(data.results || data || []);
     } catch (error) {
-      toast.error("Couldn't load contacts");
+      if (!silent) toast.error("Couldn't load contacts");
     } finally {
-      setIsLoading(prev => ({ ...prev, contacts: false }));
+      if (!silent) setIsLoading(prev => ({ ...prev, contacts: false }));
     }
   }, []);
 
@@ -159,6 +165,14 @@ export default function ConversationsPage() {
   }, [selectedContact, hasMoreMessages, isLoadingMore, messages, fetchMessages]);
 
   useEffect(() => { fetchContacts(debouncedSearchTerm); }, [debouncedSearchTerm, fetchContacts]);
+
+  // Poll contacts every 10s so the list reorders when other contacts receive messages
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchContacts(debouncedSearchTerm, true);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [debouncedSearchTerm, fetchContacts]);
 
   useEffect(() => {
     if (selectedContact) {
@@ -266,7 +280,8 @@ export default function ConversationsPage() {
   }, [contacts]);
 
   return (
-    <div className="flex flex-1 min-h-0 overflow-hidden rounded-xl border bg-background shadow-sm">
+    <div className="relative flex-1 min-h-0">
+    <div className="absolute inset-0 flex overflow-hidden rounded-xl border bg-background shadow-sm">
       {/* Contacts Panel */}
       <div className={`${selectedContact ? 'hidden md:flex md:w-96' : 'flex w-full'} border-r flex-col bg-background transition-all duration-300 h-full`}>
         <div className="p-3 border-b shrink-0 bg-background z-10">
@@ -412,6 +427,7 @@ export default function ConversationsPage() {
           <p className="max-w-md text-sm">Choose from your existing conversations or start a new one</p>
         </div>
       )}
+    </div>
     </div>
   );
 }
