@@ -92,6 +92,18 @@ def queue_notifications_to_users(
             render_context.setdefault('order_amount', od.get('amount', '0.00'))
             render_context.setdefault('order_id', od.get('id', ''))
 
+    # Flatten quote request details
+    if 'quote_request_saved' in render_context:
+        qr = render_context['quote_request_saved']
+        if isinstance(qr, dict):
+            for field in (
+                'monthly_bill', 'gadgets_to_power', 'roof_type',
+                'property_type', 'location', 'customer_name', 'request_id',
+            ):
+                val = qr.get(field)
+                if val is not None and val != '':
+                    render_context.setdefault(field, val)
+
     # Provide safe defaults
     for key, default in {
         'customer_name': 'Customer',
@@ -107,6 +119,11 @@ def queue_notifications_to_users(
         'delivery_phone': 'N/A',
         'enquiry_reference': 'N/A',
         'recipient_name': 'User',
+        'monthly_bill': 'not provided',
+        'roof_type': 'not specified',
+        'property_type': 'not specified',
+        'location': 'not specified',
+        'gadgets_to_power': 'not specified',
     }.items():
         render_context.setdefault(key, default)
 
