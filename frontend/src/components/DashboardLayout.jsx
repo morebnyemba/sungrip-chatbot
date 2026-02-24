@@ -52,11 +52,10 @@ export default function DashboardLayout() {
     { to: '/dashboard', label: 'Dashboard', icon: <FiHome className="h-5 w-5" /> },
     { to: '/conversation', label: 'Conversations', icon: <FiMessageSquare className="h-5 w-5" /> },
     { to: '/contacts', label: 'Contacts', icon: <FiUsers className="h-5 w-5" /> },
+    { to: '/quote-requests', label: 'Quote Requests', icon: <FiCreditCard className="h-5 w-5" /> },
     { to: '/installation-requests', label: 'Installation Requests', icon: <FiActivity className="h-5 w-5" /> },
     { to: '/orders', label: 'Orders', icon: <FiCreditCard className="h-5 w-5" /> },
     { to: '/products', label: 'Products', icon: <FiBox className="h-5 w-5" /> },
-    { to: '/site-assessments', label: 'Site Assessments', icon: <FiBarChart2 className="h-5 w-5" /> },
-    { to: '/analytics', label: 'Analytics', icon: <FiBarChart2 className="h-5 w-5" /> },
     { to: '/media-library', label: 'Media Library', icon: <FiImage className="h-5 w-5" /> },
     { to: '/api-settings', label: 'API Settings', icon: <FiSettings className="h-5 w-5" /> },
   ];
@@ -126,8 +125,8 @@ export default function DashboardLayout() {
 
       {/* Sidebar */}
       <aside className={`fixed md:relative h-screen transition-all duration-300 ease-in-out border-r border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 z-50 ${
-        collapsed ? 'md:w-20' : 'md:w-64'
-      } ${isMobileMenuOpen ? 'translate-x-0 w-64 shadow-xl' : '-translate-x-full md:translate-x-0'}`}>
+        collapsed && !isMobileMenuOpen ? 'md:w-20' : 'w-64'
+      } ${isMobileMenuOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full md:translate-x-0'}`}> 
         <div className="h-full flex flex-col">
           <div className={`flex items-center p-4 h-16 ${collapsed ? 'justify-center' : 'justify-between'}`}>
             <Link to="/dashboard" className="flex items-center overflow-hidden" onClick={() => isMobile && setIsMobileMenuOpen(false)}>
