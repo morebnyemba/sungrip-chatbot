@@ -137,7 +137,11 @@ class QuoteRequest(models.Model):
         decimal_places=2, 
         null=True, 
         blank=True,
-        help_text="Customer's monthly electricity bill"
+        help_text="Customer's monthly electricity bill (legacy, may be blank)"
+    )
+    gadgets_to_power = models.TextField(
+        blank=True,
+        help_text="List of gadgets/appliances customer wants to power"
     )
     roof_type = models.CharField(
         max_length=50, 

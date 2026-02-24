@@ -277,6 +277,7 @@ def save_quote_request(contact, context: dict, params: dict) -> dict:
         
         # Extract data from context
         monthly_bill = context.get('monthly_bill')
+        gadgets_to_power = context.get('gadgets_to_power', '')
         roof_type = context.get('roof_type', '')
         property_type = context.get('property_type', '')
         location = context.get('location', '')
@@ -312,6 +313,7 @@ def save_quote_request(contact, context: dict, params: dict) -> dict:
             request_id=request_id,
             customer_name=customer_name,
             monthly_bill=monthly_bill,
+            gadgets_to_power=gadgets_to_power,
             roof_type=roof_type,
             location=location,
             notes='\n'.join(notes_parts),
@@ -323,6 +325,7 @@ def save_quote_request(contact, context: dict, params: dict) -> dict:
             'id': quote_request_obj.id,
             'request_id': request_id,
             'monthly_bill': monthly_bill,
+            'gadgets_to_power': gadgets_to_power,
             'roof_type': roof_type,
             'property_type': property_type,
             'location': location,

@@ -12,8 +12,6 @@ import Conversation from './pages/Conversation';
 import LoginPage from './pages/LoginPage';
 import InstallationRequestsPage from './pages/InstallationRequestsPage';
 import OrdersPage from './pages/OrdersPage';
-import SiteAssessmentsPage from './pages/SiteAssessmentsPage';
-import AnalyticsPage from './pages/AnalyticsPage';
 import ProductsPage from './pages/ProductsPage';
 
 const NotFoundPage = () => (
@@ -47,10 +45,8 @@ const router = createBrowserRouter([
       { path: 'api-settings', element: <ApiSettings /> },
       { path: 'media-library', element: <MediaLibraryPage /> },
       { path: 'contacts', element: <ContactsPage /> },
-      { path: 'analytics', element: <AnalyticsPage /> },
       { path: 'installation-requests', element: <InstallationRequestsPage /> },
       { path: 'orders', element: <OrdersPage /> },
-      { path: 'site-assessments', element: <SiteAssessmentsPage /> },
       { path: 'conversation', element: <Conversation /> },
       { path: 'products', element: <ProductsPage /> },
       { path: '*', element: <NotFoundPage /> },
