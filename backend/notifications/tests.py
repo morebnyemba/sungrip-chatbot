@@ -20,7 +20,7 @@ class NotificationTemplateRenderingTests(TestCase):
             message_body=(
                 "👤 *Customer:* {{ customer_name }}\n"
                 "📱 *Phone:* {{ customer_phone }}\n"
-                "💰 *Monthly Bill:* ${{ monthly_bill }}\n"
+                "🔌 *Gadgets to Power:* {{ gadgets_to_power }}\n"
                 "🏠 *Roof Type:* {{ roof_type }}\n"
                 "🏘️ *Property:* {{ property_type }}\n"
                 "📍 *Location:* {{ location }}\n"
@@ -32,14 +32,14 @@ class NotificationTemplateRenderingTests(TestCase):
         context = {
             'customer_name': 'Alice',
             'customer_phone': '+263712345678',
-            'monthly_bill': '150',
+            'gadgets_to_power': 'TV, fridge, lights (6)',
             'roof_type': 'Tile Roof',
             'property_type': 'Residential',
             'location': 'Harare',
         }
         rendered = render_template_string(self.template.message_body, context)
         self.assertIn('Alice', rendered)
-        self.assertIn('150', rendered)
+        self.assertIn('TV, fridge, lights (6)', rendered)
         self.assertIn('Tile Roof', rendered)
         self.assertIn('Residential', rendered)
         self.assertIn('Harare', rendered)
@@ -51,7 +51,6 @@ class NotificationTemplateRenderingTests(TestCase):
                 'success': True,
                 'id': 1,
                 'request_id': 'QUOTE-123',
-                'monthly_bill': '200',
                 'gadgets_to_power': 'TV, fridge',
                 'roof_type': 'Metal / IBR',
                 'property_type': 'Commercial',
@@ -68,7 +67,7 @@ class NotificationTemplateRenderingTests(TestCase):
             qr = render_context['quote_request_saved']
             if isinstance(qr, dict):
                 for field in (
-                    'monthly_bill', 'gadgets_to_power', 'roof_type',
+                    'gadgets_to_power', 'roof_type',
                     'property_type', 'location', 'customer_name', 'request_id',
                 ):
                     val = qr.get(field)
@@ -77,7 +76,7 @@ class NotificationTemplateRenderingTests(TestCase):
 
         rendered = render_template_string(self.template.message_body, render_context)
         self.assertIn('Bob', rendered)
-        self.assertIn('200', rendered)
+        self.assertIn('TV, fridge', rendered)
         self.assertIn('Metal / IBR', rendered)
         self.assertIn('Commercial', rendered)
         self.assertIn('Bulawayo', rendered)
@@ -85,10 +84,10 @@ class NotificationTemplateRenderingTests(TestCase):
     def test_top_level_values_take_precedence_over_nested(self):
         """Top-level context values are NOT overwritten by nested ones."""
         context = {
-            'monthly_bill': '300',  # top-level takes priority
+            'gadgets_to_power': 'TV, fridge',  # top-level takes priority
             'roof_type': 'Tile',
             'quote_request_saved': {
-                'monthly_bill': '200',
+                'gadgets_to_power': 'Lights only',
                 'roof_type': 'Metal',
             },
         }
@@ -96,23 +95,22 @@ class NotificationTemplateRenderingTests(TestCase):
         if 'quote_request_saved' in render_context:
             qr = render_context['quote_request_saved']
             if isinstance(qr, dict):
-                for field in ('monthly_bill', 'roof_type'):
+                for field in ('gadgets_to_power', 'roof_type'):
                     val = qr.get(field)
                     if val is not None and val != '':
                         render_context.setdefault(field, val)
 
         rendered = render_template_string(
-            "${{ monthly_bill }} {{ roof_type }}", render_context
+            "{{ gadgets_to_power }} {{ roof_type }}", render_context
         )
-        self.assertIn('300', rendered)
+        self.assertIn('TV, fridge', rendered)
         self.assertIn('Tile', rendered)
-        self.assertNotIn('200', rendered)
+        self.assertNotIn('Lights only', rendered)
         self.assertNotIn('Metal', rendered)
 
     def test_safe_defaults_for_quote_fields(self):
         """Missing quote fields get safe default values."""
         defaults = {
-            'monthly_bill': 'not provided',
             'roof_type': 'not specified',
             'property_type': 'not specified',
             'location': 'not specified',
@@ -138,7 +136,7 @@ class SendGroupNotificationFlatteningTests(TestCase):
             'quote_request_saved': {
                 'success': True,
                 'id': 42,
-                'monthly_bill': '175',
+                'gadgets_to_power': 'TV, borehole pump',
                 'roof_type': 'Concrete',
                 'property_type': 'Residential',
                 'location': 'Mutare',
@@ -166,7 +164,7 @@ class SendGroupNotificationFlatteningTests(TestCase):
             if notif_ctx is None:
                 notif_ctx = call_kwargs[0][1] if len(call_kwargs[0]) > 1 else {}
 
-            self.assertEqual(notif_ctx.get('monthly_bill'), '175')
+            self.assertEqual(notif_ctx.get('gadgets_to_power'), 'TV, borehole pump')
             self.assertEqual(notif_ctx.get('roof_type'), 'Concrete')
             self.assertEqual(notif_ctx.get('property_type'), 'Residential')
             self.assertEqual(notif_ctx.get('location'), 'Mutare')
