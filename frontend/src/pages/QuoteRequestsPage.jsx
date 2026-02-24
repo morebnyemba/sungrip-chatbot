@@ -7,7 +7,48 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { FiSearch, FiLoader, FiEdit2, FiTrash2, FiRefreshCw } from 'react-icons/fi';
+import { FiSearch, FiLoader, FiRefreshCw, FiPhone } from 'react-icons/fi';
+import { BsWhatsapp } from 'react-icons/bs';
+function getWhatsappPhone(request) {
+  return (request.contact_whatsapp_id || request.contact_phone || '').replace(/\D/g, '');
+}
+
+function RequestDetailDialog({ request, open, onClose }) {
+  if (!request) return null;
+  const whatsappPhone = getWhatsappPhone(request);
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Quote Request {request.request_id}</DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div><span className="font-medium text-muted-foreground">Customer:</span> <span>{request.customer_name_display}</span></div>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-muted-foreground">Contact:</span>
+            {request.contact_phone && (
+              <a href={`tel:${request.contact_phone}`} className="text-blue-600 hover:underline flex items-center gap-1">
+                <FiPhone className="h-3.5 w-3.5" />{request.contact_phone}
+              </a>
+            )}
+            {whatsappPhone && (
+              <a href={`https://wa.me/${whatsappPhone}`} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:underline flex items-center gap-1">
+                <BsWhatsapp className="h-3.5 w-3.5" />WhatsApp
+              </a>
+            )}
+          </div>
+          <div><span className="font-medium text-muted-foreground">Gadgets:</span> <span>{request.gadgets_to_power || '—'}</span></div>
+          <div><span className="font-medium text-muted-foreground">Roof Type:</span> <span>{request.roof_type || '—'}</span></div>
+          <div><span className="font-medium text-muted-foreground">Location:</span> <span>{request.location || '—'}</span></div>
+          <div><span className="font-medium text-muted-foreground">Status:</span> <span>{request.status}</span></div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { quoteRequestsApi } from '@/lib/api';
 
@@ -31,6 +72,7 @@ function QuoteRequestsPage() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('all');
   const [search, setSearch] = useState('');
+  const [selectedRequest, setSelectedRequest] = useState(null);
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
@@ -86,7 +128,7 @@ function QuoteRequestsPage() {
             </TableHeader>
             <TableBody>
               {requests.map(req => (
-                <TableRow key={req.id}>
+                <TableRow key={req.id} className="cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800" onClick={() => setSelectedRequest(req)}>
                   <TableCell>{req.request_id}</TableCell>
                   <TableCell>{req.customer_name_display}</TableCell>
                   <TableCell>{req.gadgets_to_power || '—'}</TableCell>
@@ -102,6 +144,7 @@ function QuoteRequestsPage() {
           </Table>
         </CardContent>
       </Card>
+      <RequestDetailDialog request={selectedRequest} open={!!selectedRequest} onClose={() => setSelectedRequest(null)} />
     </div>
   );
 }
