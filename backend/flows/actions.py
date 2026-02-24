@@ -1073,6 +1073,15 @@ def send_group_notification(contact, context: dict, params: dict) -> dict:
             )
         notification_ctx.setdefault('timestamp', timezone.now().strftime('%Y-%m-%d %H:%M'))
 
+        # Flatten saved request data so template variables are available
+        # at the top level (quote_request_saved, installation_request_saved).
+        for saved_key in ('quote_request_saved', 'installation_request_saved'):
+            saved_data = notification_ctx.get(saved_key)
+            if isinstance(saved_data, dict):
+                for field, val in saved_data.items():
+                    if field not in ('success', 'id', 'timestamp') and val is not None and val != '':
+                        notification_ctx.setdefault(field, val)
+
         # Auto-compute Google Maps link from location_pin if not already set
         if 'google_maps_link' not in notification_ctx:
             loc_pin = notification_ctx.get('location_pin')

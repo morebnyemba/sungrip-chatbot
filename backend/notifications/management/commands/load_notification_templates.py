@@ -71,7 +71,7 @@ SUNGRIP_TEMPLATES = [
             "━━━━━━━━━━━━━━━━━━━━\n"
             "👤 *Customer:* {{ customer_name }}\n"
             "📱 *Phone:* {{ customer_phone }}\n"
-            "💰 *Monthly Bill:* ${{ monthly_bill }}\n"
+            "🔌 *Gadgets to Power:* {{ gadgets_to_power }}\n"
             "🏠 *Roof Type:* {{ roof_type }}\n"
             "🏘️ *Property:* {{ property_type }}\n"
             "📍 *Location:* {{ location }}\n"
