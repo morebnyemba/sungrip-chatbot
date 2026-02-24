@@ -112,8 +112,8 @@ export default function DashboardLayout() {
           <Button variant="ghost" size="icon" className="rounded-full relative" onClick={() => toast.info('Notifications coming soon.')}>
             <FiBell className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon" className="rounded-full">
-            <FiUser className="h-5 w-5" />
+          <Button variant="ghost" size="icon" className="rounded-full" onClick={handleLogout} title="Logout">
+            <FiLogOut className="h-5 w-5 text-red-600" />
           </Button>
         </div>
       </header>

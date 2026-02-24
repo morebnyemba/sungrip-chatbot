@@ -13,6 +13,7 @@ import LoginPage from './pages/LoginPage';
 import InstallationRequestsPage from './pages/InstallationRequestsPage';
 import OrdersPage from './pages/OrdersPage';
 import ProductsPage from './pages/ProductsPage';
+import QuoteRequestsPage from './pages/QuoteRequestsPage';
 
 const NotFoundPage = () => (
   <div className="p-10 text-center">
@@ -45,6 +46,7 @@ const router = createBrowserRouter([
       { path: 'api-settings', element: <ApiSettings /> },
       { path: 'media-library', element: <MediaLibraryPage /> },
       { path: 'contacts', element: <ContactsPage /> },
+      { path: 'quote-requests', element: <QuoteRequestsPage /> },
       { path: 'installation-requests', element: <InstallationRequestsPage /> },
       { path: 'orders', element: <OrdersPage /> },
       { path: 'conversation', element: <Conversation /> },
