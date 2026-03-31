@@ -13,7 +13,19 @@ class Contact(models.Model):
     phone_number = models.CharField(max_length=20)
     profile_name = models.CharField(max_length=200, blank=True)
     name = models.CharField(max_length=200, blank=True, help_text="Display name (alias for profile_name)")
-    
+
+    # Language preference
+    LANGUAGE_CHOICES = [
+        ('en', 'English'),
+        ('sn', 'Shona'),
+    ]
+    preferred_language = models.CharField(
+        max_length=5,
+        choices=LANGUAGE_CHOICES,
+        default='en',
+        help_text="Preferred language for automated flow messages",
+    )
+
     # Status
     is_blocked = models.BooleanField(default=False)
     opt_in_status = models.BooleanField(default=True, help_text="Has opted in to receive messages")

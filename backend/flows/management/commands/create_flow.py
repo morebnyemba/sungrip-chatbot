@@ -20,6 +20,13 @@ from flows.definitions.installation_scheduling_flow import INSTALLATION_SCHEDULI
 from flows.definitions.solar_packages_flow import SOLAR_PACKAGES_FLOW
 from flows.definitions.contact_support_flow import CONTACT_SUPPORT_FLOW
 from flows.definitions.order_delivery_info_flow import ORDER_DELIVERY_INFO_FLOW
+from flows.definitions.language_selection_flow import LANGUAGE_SELECTION_FLOW
+from flows.definitions.main_menu_flow_sn import MAIN_MENU_FLOW_SN
+from flows.definitions.solar_packages_flow_sn import SOLAR_PACKAGES_FLOW_SN
+from flows.definitions.solar_quote_flow_sn import SOLAR_QUOTE_FLOW_SN
+from flows.definitions.installation_scheduling_flow_sn import INSTALLATION_SCHEDULING_FLOW_SN
+from flows.definitions.contact_support_flow_sn import CONTACT_SUPPORT_FLOW_SN
+from flows.definitions.order_delivery_info_flow_sn import ORDER_DELIVERY_INFO_FLOW_SN
 import logging
 
 logger = logging.getLogger(__name__)
@@ -32,7 +39,15 @@ class Command(BaseCommand):
         parser.add_argument(
             '--flow',
             type=str,
-            choices=['main_menu', 'solar_quote', 'installation_scheduling', 'solar_packages', 'contact_support', 'order_delivery_info', 'all'],
+            choices=[
+                'main_menu', 'solar_quote', 'installation_scheduling',
+                'solar_packages', 'contact_support', 'order_delivery_info',
+                'language_selection',
+                'main_menu_sn', 'solar_packages_sn', 'solar_quote_sn',
+                'installation_scheduling_sn', 'contact_support_sn',
+                'order_delivery_info_sn',
+                'all', 'all_en', 'all_sn',
+            ],
             default='all',
             help='Which flow to create (default: all)'
         )
@@ -43,18 +58,38 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("--- Starting Solar Flow Creation Script ---"))
 
         flows_to_create = []
-        if flow_choice in ['main_menu', 'all']:
+
+        # ── English flows ──────────────────────────────────────────
+        if flow_choice in ['main_menu', 'all', 'all_en']:
             flows_to_create.append(MAIN_MENU_FLOW)
-        if flow_choice in ['solar_quote', 'all']:
+        if flow_choice in ['solar_quote', 'all', 'all_en']:
             flows_to_create.append(SOLAR_QUOTE_FLOW)
-        if flow_choice in ['installation_scheduling', 'all']:
+        if flow_choice in ['installation_scheduling', 'all', 'all_en']:
             flows_to_create.append(INSTALLATION_SCHEDULING_FLOW)
-        if flow_choice in ['solar_packages', 'all']:
+        if flow_choice in ['solar_packages', 'all', 'all_en']:
             flows_to_create.append(SOLAR_PACKAGES_FLOW)
-        if flow_choice in ['contact_support', 'all']:
+        if flow_choice in ['contact_support', 'all', 'all_en']:
             flows_to_create.append(CONTACT_SUPPORT_FLOW)
-        if flow_choice in ['order_delivery_info', 'all']:
+        if flow_choice in ['order_delivery_info', 'all', 'all_en']:
             flows_to_create.append(ORDER_DELIVERY_INFO_FLOW)
+
+        # ── Language selection ─────────────────────────────────────
+        if flow_choice in ['language_selection', 'all']:
+            flows_to_create.append(LANGUAGE_SELECTION_FLOW)
+
+        # ── Shona flows ────────────────────────────────────────────
+        if flow_choice in ['main_menu_sn', 'all', 'all_sn']:
+            flows_to_create.append(MAIN_MENU_FLOW_SN)
+        if flow_choice in ['solar_packages_sn', 'all', 'all_sn']:
+            flows_to_create.append(SOLAR_PACKAGES_FLOW_SN)
+        if flow_choice in ['solar_quote_sn', 'all', 'all_sn']:
+            flows_to_create.append(SOLAR_QUOTE_FLOW_SN)
+        if flow_choice in ['installation_scheduling_sn', 'all', 'all_sn']:
+            flows_to_create.append(INSTALLATION_SCHEDULING_FLOW_SN)
+        if flow_choice in ['contact_support_sn', 'all', 'all_sn']:
+            flows_to_create.append(CONTACT_SUPPORT_FLOW_SN)
+        if flow_choice in ['order_delivery_info_sn', 'all', 'all_sn']:
+            flows_to_create.append(ORDER_DELIVERY_INFO_FLOW_SN)
 
         if not flows_to_create:
             raise CommandError(f"No flows selected for creation with choice '{flow_choice}'.")

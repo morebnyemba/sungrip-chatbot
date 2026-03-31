@@ -733,6 +733,42 @@ def _extract_valid_interactive_ids(message_config: dict) -> list:
 
 
 # ---------------------------------------------------------------------------
+# Language-aware flow resolution
+# ---------------------------------------------------------------------------
+
+def _resolve_flow_name_for_language(
+    base_name: str, contact: 'Contact'
+) -> str:
+    """
+    Given a base flow name (e.g. ``main_menu``) and a contact, return the
+    language-specific variant if the contact prefers a non-default language
+    **and** that variant exists in the database.
+
+    Resolution order:
+    1. ``{base_name}_{lang}``  (e.g. ``main_menu_sn``) — if it exists & active
+    2. ``base_name`` as-is      (fallback to the original)
+
+    If the base_name already ends with a language suffix (``_sn``), it is
+    returned unchanged.
+    """
+    lang = getattr(contact, 'preferred_language', 'en') or 'en'
+
+    # Already language-suffixed → no transformation
+    if base_name.endswith(f'_{lang}'):
+        return base_name
+
+    # Default language needs no suffix
+    if lang == 'en':
+        return base_name
+
+    candidate = f'{base_name}_{lang}'
+    if Flow.objects.filter(name=candidate, is_active=True).exists():
+        return candidate
+
+    return base_name
+
+
+# ---------------------------------------------------------------------------
 # Flow triggering
 # ---------------------------------------------------------------------------
 
@@ -742,6 +778,8 @@ def _trigger_new_flow(
     """
     Try to trigger a new flow from message text.
     Uses proper keyword matching (iterates keywords in Python, not __icontains).
+    Respects the contact's preferred language — if a language-specific
+    variant of the matched flow exists, it is used instead.
     Returns the new FlowSession if triggered, None otherwise.
     """
     if not message_text:
@@ -765,6 +803,17 @@ def _trigger_new_flow(
 
     if not matched_flow:
         return None
+
+    # --- language resolution: prefer the contact's language variant ---
+    resolved_name = _resolve_flow_name_for_language(
+        matched_flow.name, contact
+    )
+    if resolved_name != matched_flow.name:
+        lang_flow = Flow.objects.filter(
+            name=resolved_name, is_active=True
+        ).first()
+        if lang_flow:
+            matched_flow = lang_flow
 
     entry_step = FlowStep.objects.filter(
         flow=matched_flow, is_entry_point=True
@@ -806,24 +855,43 @@ def _trigger_main_menu_for_first_contact(
     contact: 'Contact',
 ) -> Optional[FlowSession]:
     """
-    Auto-trigger the main_menu flow for a first-time contact,
-    regardless of keyword match.
-    Returns the new FlowSession if triggered, None otherwise.
+    Auto-trigger the language_selection flow (or main_menu) for a
+    first-time contact, regardless of keyword match.
+
+    If the contact already has a language preference set (not the
+    default 'en' because they previously chose), we route directly
+    to the appropriate main_menu variant.  Otherwise we show the
+    language selection prompt.
     """
-    main_menu_flow = Flow.objects.filter(
-        name='main_menu', is_active=True
+    lang = getattr(contact, 'preferred_language', 'en') or 'en'
+
+    # If the contact already chose a language before, go straight to menu
+    if lang != 'en':
+        flow_name = _resolve_flow_name_for_language('main_menu', contact)
+    else:
+        # Try language_selection first; fall back to main_menu
+        flow_name = 'language_selection'
+
+    target_flow = Flow.objects.filter(
+        name=flow_name, is_active=True
     ).first()
 
-    if not main_menu_flow:
-        logger.warning("No active 'main_menu' flow found for first-contact auto-trigger.")
+    # Fallback: if language_selection doesn't exist yet, use main_menu
+    if not target_flow and flow_name == 'language_selection':
+        target_flow = Flow.objects.filter(
+            name='main_menu', is_active=True
+        ).first()
+
+    if not target_flow:
+        logger.warning("No active flow found for first-contact auto-trigger.")
         return None
 
     entry_step = FlowStep.objects.filter(
-        flow=main_menu_flow, is_entry_point=True
+        flow=target_flow, is_entry_point=True
     ).first()
 
     if not entry_step:
-        logger.error("Main menu flow has no entry point for first-contact auto-trigger.")
+        logger.error(f"Flow '{target_flow.name}' has no entry point for first-contact auto-trigger.")
         return None
 
     # End any existing active sessions (defensive)
@@ -836,14 +904,14 @@ def _trigger_main_menu_for_first_contact(
 
     session = FlowSession.objects.create(
         contact=contact,
-        flow=main_menu_flow,
+        flow=target_flow,
         current_step=entry_step,
         status='active',
         context_data={}
     )
 
     logger.info(
-        f"Auto-triggered main_menu flow for first-time contact "
+        f"Auto-triggered '{target_flow.name}' flow for first-time contact "
         f"{contact.phone_number}"
     )
     return session
